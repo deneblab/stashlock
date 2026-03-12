@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/stashlock-server-go
+  IMAGE_NAME: ${{ github.repository_owner }}/stashlock-server
 
 jobs:
   build-and-push:
