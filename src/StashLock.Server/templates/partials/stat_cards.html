@@ -1,0 +1,32 @@
+<div class="stat-card">
+    <div class="label">Total Keys</div>
+    <div class="value accent">{{.TotalKeys}}</div>
+</div>
+<div class="stat-card">
+    <div class="label">Active Keys</div>
+    <div class="value success">{{.ActiveKeys}}</div>
+</div>
+<div class="stat-card">
+    <div class="label">Storage Used</div>
+    <div class="value accent">{{formatBytes .TotalSizeBytes}}</div>
+</div>
+<div class="stat-card">
+    <div class="label">API Keys</div>
+    <div class="value accent">{{.TotalApiKeys}}</div>
+</div>
+<div class="stat-card">
+    <div class="label">Active API Keys</div>
+    <div class="value success">{{.ActiveApiKeys}}</div>
+</div>
+<div class="stat-card">
+    <div class="label">Audit Events</div>
+    <div class="value accent">{{.TotalAuditEvents}}</div>
+</div>
+<div class="stat-card">
+    <div class="label">Deleted Keys</div>
+    <div class="value warn">{{.DeletedKeys}}</div>
+</div>
+<div class="stat-card">
+    <div class="label">Expired Keys</div>
+    <div class="value danger">{{.ExpiredKeys}}</div>
+</div>

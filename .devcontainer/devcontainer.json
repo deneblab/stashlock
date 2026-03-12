@@ -1,0 +1,56 @@
+{
+  "name": "StashLock",
+  //"image": "mcr.microsoft.com/devcontainers/dotnet:9.0",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+  "forwardPorts": [
+    8080
+  ],
+  "portsAttributes": {
+    "8080": {
+      "label": "StashLock Server",
+      "onAutoForward": "notify"
+    }
+  },
+  "containerEnv": {
+    "ASPNETCORE_ENVIRONMENT": "Development",
+    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+    "GIT_CONFIG_GLOBAL": "/home/vscode/.config/git/config",
+    "DOTNET_SKIP_WORKLOAD_MANIFEST_UPDATE": "1",
+    "DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE": "1",
+    "NUGET_PACKAGES": "/home/vscode/.nuget/packages"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "anthropic.claude-code",
+        "humao.rest-client",
+        "alexcvzz.vscode-sqlite",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "dotnet.restoreAutomatically": false
+      }
+    }
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig-host,type=bind,readonly",
+    "source=${localWorkspaceFolder}/.devcontainer/.cache/claude,target=/home/vscode/.claude,type=bind",
+    "source=${localWorkspaceFolder}/.devcontainer/.cache/claude/.claude.json,target=/home/vscode/.claude.json,type=bind",
+    "source=${localWorkspaceFolder}/.devcontainer/.cache/nuget,target=/home/vscode/.nuget,type=bind",
+    "source=${localWorkspaceFolder}/.devcontainer/.cache/npm,target=/home/vscode/.npm,type=bind"
+  ],
+  "initializeCommand": "mkdir -p .devcontainer/.cache/claude .devcontainer/.cache/nuget .devcontainer/.cache/npm && touch .devcontainer/.cache/claude/.claude.json", // Added git safe directory fix to postCreateCommand
+  "postCreateCommand": "set -e; mkdir -p /home/vscode/.config/git; touch /home/vscode/.config/git/config; git config --global --unset-all include.path || true; git config --global --add include.path /home/vscode/.gitconfig-host; git config --global --add safe.directory /workspaces/StashLock; pwsh .devcontainer/post-create.ps1",
+  "remoteUser": "vscode"
+}

@@ -1,0 +1,93 @@
+{{define "content"}}
+<div class="key-banner" id="key-banner">
+    <p>API key created successfully. Copy it now — it will not be shown again.</p>
+    <div class="key-value">
+        <span id="key-banner-value" class="mono"></span>
+        <button class="btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('key-banner-value').textContent).then(function(){showToast('Copied to clipboard');})">Copy</button>
+    </div>
+</div>
+
+<div class="toolbar">
+    <button class="btn btn-sm" onclick="openCreateKeyModal()">+ Create API Key</button>
+    <button class="btn-ghost btn-sm"
+            hx-get="/admin/keys?handler=List"
+            hx-target="#key-list"
+            hx-swap="innerHTML">Refresh</button>
+</div>
+
+<div id="key-list"
+     hx-get="/admin/keys?handler=List"
+     hx-trigger="load, refresh from:body"
+     hx-swap="innerHTML">
+    <div class="spinner"></div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+function openCreateKeyModal(){
+    document.getElementById('key-banner').classList.remove('show');
+    openModal(
+        '<h3>Create API Key</h3>'+
+        '<form id="create-key-form">'+
+        '<div class="form-group"><label>Name</label><input type="text" name="name" placeholder="my-service" required></div>'+
+        '<div class="form-group"><label>Scopes (comma-separated, * for all)</label><input type="text" name="scopes" value="*" placeholder="e.g. myapp,myapp2 or *"></div>'+
+        '<div class="form-group"><label>Permissions</label>'+
+        '<div class="checkbox-row"><input type="checkbox" name="canRead" id="ak-read" checked value="true"><label for="ak-read">Read</label></div>'+
+        '<div class="checkbox-row"><input type="checkbox" name="canWrite" id="ak-write" checked value="true"><label for="ak-write">Write</label></div>'+
+        '<div class="checkbox-row"><input type="checkbox" name="canDelete" id="ak-delete" value="true"><label for="ak-delete">Delete</label></div>'+
+        '</div>'+
+        '<div class="form-group"><label>Expires At (ISO date, optional)</label><input type="text" name="expiresAt" placeholder="e.g. 2026-12-31T23:59:59Z"></div>'+
+        '<div class="form-group"><label>Rate Limit (req/min, optional)</label><input type="number" name="rateLimitPerMinute" placeholder="e.g. 60" min="0"></div>'+
+        '<div class="form-actions">'+
+        '<button type="button" class="btn-ghost" onclick="closeModal()">Cancel</button>'+
+        '<button type="submit" class="btn">Create</button>'+
+        '</div></form>'
+    );
+    document.getElementById('create-key-form').addEventListener('submit', function(e){
+        e.preventDefault();
+        var form = e.target;
+        var data = new FormData(form);
+        fetch('/admin/keys?handler=Create', {
+            method: 'POST',
+            body: data
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(res){
+            closeModal();
+            if(res.key){
+                document.getElementById('key-banner-value').textContent = res.key;
+                document.getElementById('key-banner').classList.add('show');
+            }
+            showToast('API key created');
+            htmx.trigger('#key-list', 'refresh');
+        })
+        .catch(function(e){ showToast('Error: '+e.message); });
+    });
+}
+
+function confirmRevokeKey(id, name){
+    openModal(
+        '<h3>Revoke API Key</h3>'+
+        '<p style="color:var(--text-dim);margin-bottom:16px">Revoke <strong>'+escapeHtml(name)+'</strong>? This cannot be undone.</p>'+
+        '<div class="form-actions">'+
+        '<button class="btn-ghost" onclick="closeModal()">Cancel</button>'+
+        '<button class="btn-danger" hx-post="/admin/keys?handler=Revoke&id='+encodeURIComponent(id)+'" hx-target="#key-list" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful){closeModal();showToast(\'Key revoked\');}">Revoke</button>'+
+        '</div>'
+    );
+    htmx.process(document.getElementById('modal-card'));
+}
+
+function confirmDeleteKey(id, name){
+    openModal(
+        '<h3>Delete API Key</h3>'+
+        '<p style="color:var(--text-dim);margin-bottom:16px">Permanently delete <strong>'+escapeHtml(name)+'</strong>?</p>'+
+        '<div class="form-actions">'+
+        '<button class="btn-ghost" onclick="closeModal()">Cancel</button>'+
+        '<button class="btn-danger" hx-post="/admin/keys?handler=DeleteKey&id='+encodeURIComponent(id)+'" hx-target="#key-list" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful){closeModal();showToast(\'Key deleted\');}">Delete</button>'+
+        '</div>'
+    );
+    htmx.process(document.getElementById('modal-card'));
+}
+</script>
+{{end}}

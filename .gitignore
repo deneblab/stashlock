@@ -1,0 +1,68 @@
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+obj
+bin
+*.user
+*.suo
+*.orig
+output
+publish-*
+packages
+_ReSharper.*
+_dotCover.*
+*.Resharper
+*.Cache
+*.cache
+~$*
+[Pp]ublish
+!src/StashLock.Cli/Modules/Publish/
+*.ide
+*nunit.TestResult.*.xml
+*.vsp
+
+# Visual Studio build objects
+bin/
+csx/
+obj/
+rcf/
+
+## Rider IDea
+src/.idea/*
+
+
+## VsCode
+/.vscode/*
+
+
+src/build/tools/*
+!src/build/tools/nuget
+
+### Tools
+/tools/*
+!/tools/dev-helpers
+!/tools/packages.config
+# add local tools 
+!/tools/LibZ.Tool*
+!/tools/7zip*
+
+.vscode/
+/stuff/*
+.build
+.nuke/temp
+.secrets/*
+dev/*
+src/.vs/*
+src/.vscode/
+.tmp/
+src/build/.vscode/
+artifacts/
+nul
+
+# .claude/*
+# .agents/*
+nupkg/*
+.devcontainer/.cache/
+.agents/*
+.claude/*   

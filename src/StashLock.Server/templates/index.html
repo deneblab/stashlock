@@ -1,0 +1,8 @@
+{{define "content"}}
+<div id="stat-grid" class="stat-grid"
+     hx-get="/admin/index?handler=Stats"
+     hx-trigger="load, every 30s"
+     hx-swap="innerHTML">
+    <div class="spinner"></div>
+</div>
+{{end}}

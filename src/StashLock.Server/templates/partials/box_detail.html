@@ -1,0 +1,50 @@
+{{if .Metadata}}
+<div class="detail-section">
+    <h4>Metadata</h4>
+    <div class="detail-row"><span class="dl">Created</span><span>{{formatDate .Metadata.CreatedAt}}</span></div>
+    <div class="detail-row"><span class="dl">Updated</span><span>{{formatDate .Metadata.UpdatedAt}}</span></div>
+    <div class="detail-row"><span class="dl">Size</span><span>{{formatBytesInt .Metadata.SizeBytes}}</span></div>
+    <div class="detail-row">
+        <span class="dl">Deleted</span>
+        <span>
+            {{if .Metadata.IsDeleted}}<span class="badge badge-err">Yes</span>{{else}}<span class="badge badge-ok">No</span>{{end}}
+        </span>
+    </div>
+    {{if .Metadata.DeletedAt}}
+    <div class="detail-row"><span class="dl">Deleted At</span><span>{{formatDate .Metadata.DeletedAt}}</span></div>
+    {{end}}
+    <div class="detail-row">
+        <span class="dl">Expires</span>
+        <span>{{if .Metadata.ExpiresAt}}{{formatDate .Metadata.ExpiresAt}}{{else}}-{{end}}</span>
+    </div>
+    <div class="detail-row">
+        <span class="dl">Expired</span>
+        <span>
+            {{if .Metadata.IsExpired}}<span class="badge badge-err">Yes</span>{{else}}<span class="badge badge-ok">No</span>{{end}}
+        </span>
+    </div>
+    <div class="detail-row"><span class="dl">Versions</span><span>{{.Metadata.VersionCount}}</span></div>
+</div>
+{{end}}
+
+<div class="detail-section">
+    <h4>Value</h4>
+    <button class="btn btn-sm" onclick="revealBoxValue('{{escapeJs .Key}}', this)">Reveal Value</button>
+    <div id="revealed-value" style="margin-top:8px;display:none"></div>
+</div>
+
+{{if .History}}{{if gt (len .History) 0}}
+<div class="detail-section">
+    <h4>History</h4>
+    <ul class="history-list">
+        {{range .History}}
+        <li>
+            <span>v{{.VersionNumber}} &middot; {{formatBytesInt .SizeBytes}} &middot; {{formatDate .SavedAt}}</span>
+            <span>
+                <button class="btn-ghost btn-sm" onclick="confirmRestoreVersion('{{escapeJs $.Key}}', {{.VersionNumber}})">Restore</button>
+            </span>
+        </li>
+        {{end}}
+    </ul>
+</div>
+{{end}}{{end}}

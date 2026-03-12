@@ -1,0 +1,43 @@
+{{if not .}}
+<p class="empty-state">No API keys found.</p>
+{{else if eq (len .) 0}}
+<p class="empty-state">No API keys found.</p>
+{{else}}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Prefix</th>
+            <th>Scopes</th>
+            <th>R</th>
+            <th>W</th>
+            <th>D</th>
+            <th>Active</th>
+            <th>Rate Limit</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .}}
+        <tr>
+            <td>{{.Name}}</td>
+            <td class="mono">{{.KeyPrefix}}...</td>
+            <td class="mono">{{.Scopes}}</td>
+            <td>{{if .CanRead}}<span class="badge badge-ok">R</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>
+            <td>{{if .CanWrite}}<span class="badge badge-ok">W</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>
+            <td>{{if .CanDelete}}<span class="badge badge-ok">D</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>
+            <td>{{if .IsActive}}<span class="badge badge-ok">Active</span>{{else}}<span class="badge badge-err">Revoked</span>{{end}}</td>
+            <td>{{if .RateLimitPerMinute}}{{derefInt .RateLimitPerMinute}}/min{{else}}Default{{end}}</td>
+            <td>{{formatDate .CreatedAt}}</td>
+            <td>
+                {{if .IsActive}}
+                <button class="btn-danger btn-sm" onclick="confirmRevokeKey('{{escapeJs .Id}}', '{{escapeJs .Name}}')">Revoke</button>
+                {{end}}
+                <button class="btn-danger btn-sm" onclick="confirmDeleteKey('{{escapeJs .Id}}', '{{escapeJs .Name}}')">Delete</button>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}

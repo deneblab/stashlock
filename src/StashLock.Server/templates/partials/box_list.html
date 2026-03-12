@@ -1,0 +1,37 @@
+{{if not .}}
+<p class="empty-state">No boxes found.</p>
+{{else if eq (len .) 0}}
+<p class="empty-state">No boxes found.</p>
+{{else}}
+<table>
+    <thead>
+        <tr>
+            <th>Box</th>
+            <th>Tag</th>
+            <th>Version</th>
+            <th>Size</th>
+            <th>Created</th>
+            <th>Updated</th>
+            <th>Expires</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .}}
+        <tr>
+            <td class="mono">{{.Box}}</td>
+            <td class="mono">{{.Tag}}</td>
+            <td class="mono">{{.Version}}</td>
+            <td>{{formatBytesInt .SizeBytes}}</td>
+            <td>{{formatDate .CreatedAt}}</td>
+            <td>{{formatDate .UpdatedAt}}</td>
+            <td>{{if .ExpiresAt}}{{formatDate .ExpiresAt}}{{else}}-{{end}}</td>
+            <td>
+                <button class="btn-ghost btn-sm" onclick="openBoxDetail('{{escapeJs .Key}}')">Details</button>
+                <button class="btn-danger btn-sm" onclick="confirmDeleteBox('{{escapeJs .Key}}')">Delete</button>
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}

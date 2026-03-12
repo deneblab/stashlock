@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<RootNamespace>Deneblab.StashLock.Client</RootNamespace>
+
+		<!-- NuGet Package Metadata -->
+		<PackageId>Deneblab.StashLock.Client</PackageId>
+		<Authors>Deneblab</Authors>
+		<Company>Deneblab</Company>
+		<Description>Async-first secrets management client for StashLock vault with IConfiguration integration. Supports multiple secret sources including remote encrypted vaults, local encrypted files, and environment variables.</Description>
+		<PackageTags>secrets;vault;configuration;stashlock;async;secrets-management;environment-variables</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/deneblab/stashlock</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/deneblab/stashlock</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="StashLock.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
+		<PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.3" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+	</ItemGroup>
+
+</Project>

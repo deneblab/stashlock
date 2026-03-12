@@ -1,0 +1,58 @@
+name: NuGet Publish
+
+on:
+  push:
+    branches:
+      - main
+      - production
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install abcversion tool
+        run: dotnet tool install --global Deneblab.AbcVersionCmd
+
+      - name: Get version from abcversion
+        id: version
+        run: |
+          VERSION=$(abcversion -p semversion)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Restore Client dependencies
+        run: dotnet restore src/StashLock.Client/StashLock.Client.csproj
+
+      - name: Build Client
+        run: dotnet build src/StashLock.Client/StashLock.Client.csproj --configuration Release --no-restore
+
+      - name: Test Client
+        run: dotnet test src/StashLock.Client/StashLock.Client.csproj --configuration Release --no-build --verbosity normal
+
+      - name: Pack Client
+        run: dotnet pack src/StashLock.Client/StashLock.Client.csproj --configuration Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ./nupkg
+
+      - name: Restore CLI dependencies
+        run: dotnet restore src/StashLock.Cli/StashLock.Cli.csproj
+
+      - name: Build CLI
+        run: dotnet build src/StashLock.Cli/StashLock.Cli.csproj --configuration Release --no-restore
+
+      - name: Pack CLI
+        run: dotnet pack src/StashLock.Cli/StashLock.Cli.csproj --configuration Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ./nupkg
+
+      - name: Publish to NuGet
+        run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

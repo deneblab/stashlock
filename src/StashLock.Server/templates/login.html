@@ -1,0 +1,15 @@
+{{define "content"}}
+<div class="login-screen">
+    <div class="login-card">
+        <h1>StashLock</h1>
+        <p>Enter your master API key to continue</p>
+        <form method="post" action="/admin/login">
+            <input type="password" name="apiKey" placeholder="Master API Key" autocomplete="off" autofocus>
+            <button type="submit" class="btn">Unlock</button>
+        </form>
+        {{if .ErrorMessage}}
+        <div class="login-error">{{.ErrorMessage}}</div>
+        {{end}}
+    </div>
+</div>
+{{end}}

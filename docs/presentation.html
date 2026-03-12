@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StashLock — Secure Secrets Management</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+    <style>
+        :root {
+            --r-heading-color: #58a6ff;
+            --r-link-color: #58a6ff;
+            --r-link-color-hover: #79c0ff;
+        }
+        .reveal { font-size: 32px; }
+        .reveal h1, .reveal h2, .reveal h3 { text-transform: none; }
+        .reveal h1 { font-size: 2.2em; }
+        .reveal h2 { font-size: 1.6em; color: var(--r-heading-color); }
+        .reveal h3 { font-size: 1.2em; color: #8b949e; }
+        .reveal pre { width: 100%; font-size: 0.55em; }
+        .reveal pre code { max-height: 500px; padding: 16px; }
+        .reveal table { font-size: 0.7em; margin: 0 auto; }
+        .reveal table th { background: #161b22; color: #58a6ff; }
+        .reveal table td, .reveal table th { padding: 8px 16px; border: 1px solid #30363d; }
+        .reveal table tr:nth-child(even) { background: #0d1117; }
+        .reveal ul { font-size: 0.9em; }
+        .reveal .small { font-size: 0.7em; color: #8b949e; }
+        .brand { color: #58a6ff; }
+        .accent { color: #f0883e; }
+        .green { color: #3fb950; }
+        .red { color: #f85149; }
+        .pill {
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.6em;
+            margin: 4px;
+            background: #161b22;
+            border: 1px solid #30363d;
+        }
+        .arch-box {
+            display: inline-block;
+            padding: 20px 30px;
+            margin: 10px;
+            border-radius: 12px;
+            border: 2px solid #30363d;
+            background: #161b22;
+            text-align: center;
+            min-width: 180px;
+        }
+        .arch-box h3 { margin: 0 0 8px 0; font-size: 1em; }
+        .arch-box p { margin: 0; font-size: 0.7em; color: #8b949e; }
+        .arch-arrow {
+            display: inline-block;
+            font-size: 2em;
+            color: #58a6ff;
+            vertical-align: middle;
+            margin: 0 5px;
+        }
+        .flow-step {
+            display: inline-block;
+            padding: 12px 24px;
+            margin: 6px;
+            border-radius: 8px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            font-size: 0.8em;
+        }
+        .flow-arrow { color: #58a6ff; font-size: 1.5em; margin: 0 4px; }
+        .two-col { display: flex; gap: 40px; align-items: flex-start; }
+        .two-col > div { flex: 1; }
+    </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+    <!-- ====== TITLE ====== -->
+    <section>
+        <h1><span class="brand">StashLock</span></h1>
+        <h3>Secure Secrets Management for .NET</h3>
+        <p class="small" style="margin-top: 40px;">
+            <span class="pill">REST API</span>
+            <span class="pill">.NET Client</span>
+            <span class="pill">CLI Tool</span>
+            <span class="pill">Docker</span>
+            <span class="pill">SQLite</span>
+        </p>
+        <p class="small" style="margin-top: 30px;">
+            <a href="https://github.com/deneblab/stashlock">github.com/deneblab/stashlock</a>
+        </p>
+    </section>
+
+    <!-- ====== THE PROBLEM ====== -->
+    <section>
+        <h2>The Problem</h2>
+        <ul>
+            <li>Secrets scattered across <code>.env</code> files, config, and sticky notes</li>
+            <li>No encryption at rest &mdash; plaintext passwords in repos</li>
+            <li>No audit trail &mdash; who changed what, when?</li>
+            <li>No versioning &mdash; accidentally overwrite a key and it's gone</li>
+            <li>Cloud vaults are often overkill for small/mid teams</li>
+        </ul>
+        <p style="margin-top: 30px;" class="fragment">
+            <span class="accent">StashLock</span> &mdash; a lightweight, self-hosted alternative.
+        </p>
+    </section>
+
+    <!-- ====== WHAT IS STASHLOCK ====== -->
+    <section>
+        <h2>What is <span class="brand">StashLock</span>?</h2>
+        <p>A secure, lightweight key-value storage system (secrets vault) with a REST API, .NET client library, and command-line interface.</p>
+        <div style="margin-top: 30px; text-align: left;">
+            <div class="two-col">
+                <div>
+                    <h3 class="green">Features</h3>
+                    <ul>
+                        <li>AES-256 client-side encryption</li>
+                        <li>Version history &amp; rollback</li>
+                        <li>TTL / auto-expiration</li>
+                        <li>Soft delete with retention</li>
+                        <li>Full audit logging</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="green">Ops</h3>
+                    <ul>
+                        <li>API key auth with RBAC</li>
+                        <li>Rate limiting per key</li>
+                        <li>Admin dashboard (Razor + HTMX)</li>
+                        <li>Docker / docker-compose</li>
+                        <li>SQLite &mdash; zero config DB</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ====== ARCHITECTURE ====== -->
+    <section>
+        <h2>Architecture</h2>
+        <div style="margin-top: 30px;">
+            <div class="arch-box">
+                <h3 class="accent">CLI</h3>
+                <p><code>stashlock</code></p>
+                <p>Encrypt &amp; publish</p>
+            </div>
+            <span class="arch-arrow">&rarr;</span>
+            <div class="arch-box" style="border-color: #58a6ff;">
+                <h3 class="brand">Server</h3>
+                <p>.NET 10 &middot; REST API</p>
+                <p>SQLite storage</p>
+            </div>
+            <span class="arch-arrow">&larr;</span>
+            <div class="arch-box">
+                <h3 class="green">Client</h3>
+                <p>NuGet library</p>
+                <p>Decrypt &amp; read</p>
+            </div>
+        </div>
+        <p style="margin-top: 30px;" class="small">
+            Secrets are encrypted <em>before</em> leaving the client &mdash; the server never sees plaintext.
+        </p>
+    </section>
+
+    <!-- ====== SERVER API ====== -->
+    <section>
+        <h2>Server &mdash; REST API</h2>
+        <table>
+            <thead>
+                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>GET</td><td><code>/</code></td><td>Health check</td></tr>
+                <tr><td>GET</td><td><code>/boxes</code></td><td>List keys (optional <code>?prefix=</code>)</td></tr>
+                <tr><td>POST</td><td><code>/boxes/{key}</code></td><td>Store content (optional TTL)</td></tr>
+                <tr><td>GET</td><td><code>/boxes/{key}</code></td><td>Retrieve content</td></tr>
+                <tr><td>DELETE</td><td><code>/boxes/{key}</code></td><td>Soft-delete</td></tr>
+                <tr><td>GET</td><td><code>/boxes/{key}/meta</code></td><td>Metadata (size, timestamps)</td></tr>
+                <tr><td>GET</td><td><code>/boxes/{key}/history</code></td><td>Version history</td></tr>
+                <tr><td>GET</td><td><code>/boxes/{key}/history/{v}</code></td><td>Specific version</td></tr>
+                <tr><td>POST</td><td><code>/boxes/decode</code></td><td>Decode key + decrypt value</td></tr>
+            </tbody>
+        </table>
+        <p class="small" style="margin-top: 16px;">
+            Auth via <code>Authorization: Bearer &lt;api-key&gt;</code> &middot; Keys are URL-safe base64 encoded
+        </p>
+    </section>
+
+    <!-- ====== DECODE ENDPOINT ====== -->
+    <section>
+        <h2>Server &mdash; Decode Endpoint</h2>
+        <h3>Read secrets from any language with one HTTP call</h3>
+        <pre><code class="language-bash"># No base64 encoding, no crypto libraries needed
+curl -X POST https://vault.example.com/boxes/decode \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"box": "myapp", "tag": "secrets", "password": "Pass123"}'</code></pre>
+        <pre><code class="language-text"># Response: plain text — the decrypted value directly
+{"DbPassword": "s3cret", "ApiKey": "abc123"}</code></pre>
+        <div style="margin-top: 16px; text-align: left;">
+            <ul>
+                <li><code>box</code> + <code>tag</code> required &middot; <code>version</code> defaults to <code>00001</code></li>
+                <li><code>password</code> optional &mdash; without it, returns key info + exists flag only</li>
+                <li>Works from Python, Go, shell scripts &mdash; no .NET client needed</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- ====== ENCRYPTION ====== -->
+    <section>
+        <h2>Encryption Model</h2>
+        <div style="margin-top: 20px;">
+            <span class="flow-step"><strong>Plaintext JSON</strong></span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step"><strong>AES-256</strong><br><span class="small">PBKDF2 key derivation</span></span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step"><strong>Encrypted blob</strong></span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step"><strong>Server</strong><br><span class="small">stores ciphertext only</span></span>
+        </div>
+        <div style="margin-top: 30px; text-align: left;">
+            <ul>
+                <li><strong>Algorithm:</strong> AES-256 with PBKDF2 (Rfc2898DeriveBytes)</li>
+                <li><strong>Iterations:</strong> 100,000 &middot; SHA-256</li>
+                <li><strong>Key size:</strong> 256-bit key, 128-bit IV</li>
+                <li><strong>Sealed mode:</strong> X25519 ECIES envelope encryption with AES-256-GCM</li>
+            </ul>
+        </div>
+        <p class="small" style="margin-top: 16px;">
+            Default: zero-knowledge &mdash; server stores ciphertext only.
+            Optional: <code>/boxes/decode</code> endpoint enables server-side decryption for non-.NET consumers.
+        </p>
+    </section>
+
+    <!-- ====== CLIENT LIBRARY ====== -->
+    <section>
+        <h2>Client Library</h2>
+        <h3><code>Deneblab.StashLock.Client</code></h3>
+        <pre><code class="language-bash">dotnet add package Deneblab.StashLock.Client</code></pre>
+        <pre><code class="language-csharp">// 1. Configure — get a VaultKey
+var vaultKey = VaultKey.FromEnvironment();
+// or: VaultKey.FromFile("vault.key")
+// or: VaultKey.FromString("box.tag.version.password")
+
+// 2. Open — connect to the vault
+var store = await SecretsStoreAsync.OpenRemoteAsync(vaultKey);
+
+// 3. Read secrets
+var dbConn = await store.GetAsync("ConnectionString");
+
+var allSmtp = await store.GetSectionAsDictionaryAsync("Smtp");
+// { "Smtp:Host": "...", "Smtp:Port": "...", "Smtp:Password": "..." }</code></pre>
+        <p class="small">Zero external dependencies &middot; async-first &middot; .NET 8.0+</p>
+    </section>
+
+    <!-- ====== CLIENT - SEALED MODE ====== -->
+    <section>
+        <h2>Client &mdash; Sealed Mode</h2>
+        <h3>X25519 ECIES envelope encryption</h3>
+        <pre><code class="language-csharp">// Open with keypair-based encryption
+var store = await SecretsStoreAsync.OpenRemoteSealedAsync(
+    box: "myapp",
+    tag: "production",
+    version: "00001"
+);
+
+// With encrypted local cache for offline fallback
+var store = await SecretsStoreAsync.OpenRemoteSealedWithCacheAsync(
+    box: "myapp",
+    tag: "production",
+    cacheOptions: new CacheOptions { CacheDurationMinutes = 60 }
+);</code></pre>
+        <p class="small">
+            Environment variables: <code>STASHLOCK_API_URL</code>, <code>STASHLOCK_API_KEY</code>, <code>STASHLOCK_PRIVATE_KEY</code>
+        </p>
+    </section>
+
+    <!-- ====== CLI TOOL ====== -->
+    <section>
+        <h2>CLI Tool</h2>
+        <h3><code>Deneblab.StashLock.Cli</code></h3>
+        <pre><code class="language-bash"># Install globally
+dotnet tool install -g Deneblab.StashLock.Cli
+
+# Initialize a vault directory
+stashlock init ./my-vault --tags production,develop
+
+# Generate keypairs for each tag
+stashlock keygen ./my-vault
+
+# Encrypt secrets
+stashlock encode ./my-vault/secrets.json
+
+# Decrypt secrets
+stashlock decode ./my-vault/stashlock.enc.production.secrets.json
+
+# Publish encrypted blobs to server
+stashlock publish ./my-vault \
+    --url http://localhost:8099 \
+    --api-key YOUR_KEY \
+    --expiresIn 86400</code></pre>
+    </section>
+
+    <!-- ====== CLI WORKFLOW ====== -->
+    <section>
+        <h2>CLI Workflow</h2>
+        <div style="margin-top: 20px;">
+            <span class="flow-step"><code>init</code><br><span class="small">Create vault dir</span></span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step"><code>keygen</code><br><span class="small">Generate keypairs</span></span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step"><code>encode</code><br><span class="small">Encrypt secrets.json</span></span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step"><code>publish</code><br><span class="small">Upload to server</span></span>
+        </div>
+        <div style="margin-top: 40px;">
+            <span class="flow-step"><strong>App starts</strong></span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step"><code>Client</code> calls API</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step">Fetches ciphertext</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-step"><strong>Decrypts locally</strong></span>
+        </div>
+    </section>
+
+    <!-- ====== DOCKER DEPLOYMENT ====== -->
+    <section>
+        <h2>Docker Deployment</h2>
+        <pre><code class="language-yaml"># docker-compose.yml
+services:
+  stashlock-server:
+    image: ghcr.io/deneblab/stashlock-server:latest
+    ports:
+      - "8099:8080"
+    environment:
+      - StashLock__ApiKey=your-secret-api-key
+    volumes:
+      - ./app/work:/app/work   # SQLite DB + keys
+      - ./app/log:/app/log     # Application logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3</code></pre>
+        <pre><code class="language-bash">docker compose up -d</code></pre>
+        <p class="small">Multi-platform: linux/amd64, linux/arm64 &middot; Published to GitHub Container Registry</p>
+    </section>
+
+    <!-- ====== DASHBOARD ====== -->
+    <section>
+        <h2>Admin Dashboard</h2>
+        <div class="two-col">
+            <div>
+                <h3 class="green">Built-in Web UI</h3>
+                <ul>
+                    <li>Razor Pages + HTMX</li>
+                    <li>Dark / light theme</li>
+                    <li>Real-time stats</li>
+                    <li>Search &amp; filter boxes</li>
+                    <li>Version history viewer</li>
+                    <li>API key management (RBAC)</li>
+                    <li>Audit log browser</li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="green">Tabs</h3>
+                <div style="text-align: left;">
+                    <div class="flow-step" style="display: block; margin: 8px 0;">Overview &mdash; stats &amp; health</div>
+                    <div class="flow-step" style="display: block; margin: 8px 0;">Boxes &mdash; CRUD, restore, detail drawer</div>
+                    <div class="flow-step" style="display: block; margin: 8px 0;">API Keys &mdash; create, revoke, permissions</div>
+                    <div class="flow-step" style="display: block; margin: 8px 0;">Audit &mdash; filter by action, box, time</div>
+                </div>
+            </div>
+        </div>
+        <p class="small" style="margin-top: 20px;">
+            Access at <code>/Dashboard</code> &middot; Session-based auth &middot; No JavaScript frameworks required
+        </p>
+    </section>
+
+    <!-- ====== SECURITY FEATURES ====== -->
+    <section>
+        <h2>Security Features</h2>
+        <div class="two-col">
+            <div>
+                <h3 class="brand">Authentication</h3>
+                <ul>
+                    <li>Bearer token API keys</li>
+                    <li>Master key + scoped keys</li>
+                    <li>Per-key read/write/delete permissions</li>
+                    <li>Box-level access control</li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="brand">Protection</h3>
+                <ul>
+                    <li>Rate limiting per API key</li>
+                    <li>Security headers middleware</li>
+                    <li>Correlation ID tracking</li>
+                    <li>Request size limits (100 KB)</li>
+                    <li>CORS configuration</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- ====== GETTING STARTED ====== -->
+    <section>
+        <h2>Getting Started</h2>
+        <ol style="font-size: 0.85em;">
+            <li>
+                <strong>Deploy the server</strong>
+                <pre><code class="language-bash">docker compose up -d</code></pre>
+            </li>
+            <li>
+                <strong>Install the CLI</strong>
+                <pre><code class="language-bash">dotnet tool install -g Deneblab.StashLock.Cli</code></pre>
+            </li>
+            <li>
+                <strong>Initialize &amp; publish secrets</strong>
+                <pre><code class="language-bash">stashlock init ./vault --tags production
+stashlock keygen ./vault
+# Edit vault/secrets.json with your secrets
+stashlock encode ./vault/secrets.json
+stashlock publish ./vault --url http://localhost:8099 --api-key KEY</code></pre>
+            </li>
+            <li>
+                <strong>Read in your app</strong>
+                <pre><code class="language-csharp">var store = await SecretsStoreAsync.OpenRemoteSealedAsync("myapp", "production");
+var secret = await store.GetAsync("DbPassword");</code></pre>
+            </li>
+        </ol>
+    </section>
+
+    <!-- ====== TECH STACK ====== -->
+    <section>
+        <h2>Tech Stack</h2>
+        <table>
+            <thead>
+                <tr><th>Component</th><th>Technology</th><th>Install</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Server</strong></td>
+                    <td>.NET 10, EF Core, SQLite, Razor Pages, HTMX</td>
+                    <td><code>docker compose up</code></td>
+                </tr>
+                <tr>
+                    <td><strong>Client</strong></td>
+                    <td>.NET 8.0+, async-first, zero-dep</td>
+                    <td><code>dotnet add package Deneblab.StashLock.Client</code></td>
+                </tr>
+                <tr>
+                    <td><strong>CLI</strong></td>
+                    <td>.NET 8.0, ConsoleAppFramework</td>
+                    <td><code>dotnet tool install -g Deneblab.StashLock.Cli</code></td>
+                </tr>
+            </tbody>
+        </table>
+        <p style="margin-top: 20px;">
+            <span class="pill">MIT License</span>
+            <span class="pill">GitHub</span>
+            <span class="pill">NuGet</span>
+            <span class="pill">GHCR</span>
+        </p>
+    </section>
+
+    <!-- ====== SUMMARY ====== -->
+    <section>
+        <h2>Summary</h2>
+        <ul>
+            <li><span class="green">Self-hosted</span> &mdash; your infrastructure, your data</li>
+            <li><span class="green">Zero-knowledge</span> &mdash; server never sees plaintext</li>
+            <li><span class="green">Simple</span> &mdash; SQLite, single binary, docker-compose</li>
+            <li><span class="green">Full lifecycle</span> &mdash; CLI encrypts, server stores, client decrypts</li>
+            <li><span class="green">Production-ready</span> &mdash; auth, RBAC, audit, versioning, TTL</li>
+        </ul>
+        <div style="margin-top: 40px;">
+            <h3>
+                <a href="https://github.com/deneblab/stashlock">github.com/deneblab/stashlock</a>
+            </h3>
+        </div>
+    </section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script>
+    Reveal.initialize({
+        hash: true,
+        slideNumber: true,
+        transition: 'slide',
+        plugins: [RevealHighlight]
+    });
+</script>
+</body>
+</html>

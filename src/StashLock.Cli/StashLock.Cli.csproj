@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PackAsTool>true</PackAsTool>
+		<AssemblyName>stashlock</AssemblyName>
+		<ToolCommandName>stashlock</ToolCommandName>
+		<RootNamespace>Deneblab.StashLock.Cli</RootNamespace>
+
+		<!-- NuGet Package Metadata -->
+		<PackageId>Deneblab.StashLock.Cli</PackageId>
+		<Authors>Deneblab</Authors>
+		<Company>Deneblab</Company>
+		<Description>Command-line interface for StashLock secrets management vault. Uses X25519 ECIES envelope encryption with AES-256-GCM for keypair-based secrets management.</Description>
+		<PackageTags>stashlock;cli;secrets;vault;dotnet-tool;secrets-management;command-line;envelope-encryption</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/deneblab/stashlock</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/deneblab/stashlock</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="StashLock.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="ConsoleAppFramework" Version="5.7.13">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+		<PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.3" />
+		<PackageReference Include="NLog.Extensions.Logging" Version="6.1.1" />
+		<PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
+	</ItemGroup>
+
+</Project>

@@ -1,0 +1,145 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StashLock Dashboard</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script>
+    (function(){
+        var t=localStorage.getItem('stashlock-theme')||'dark';
+        document.documentElement.setAttribute('data-theme',t);
+    })();
+    </script>
+</head>
+<body>
+    {{if .IsLoggedIn}}
+    <div class="topbar">
+        <div class="topbar-brand">
+            StashLock
+            <span class="version-label">{{.Version}}</span>
+        </div>
+        <div class="topbar-right">
+            <span>
+                <span class="health-dot ok" id="health-dot"></span>
+                <span id="health-text" style="font-size:12px;color:var(--text-muted)">Online</span>
+            </span>
+            <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark theme"></button>
+            <form method="post" action="/admin/logout" style="display:inline">
+                <button type="submit" class="btn-ghost btn-sm">Logout</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="tab-nav">
+        <a class="tab-btn {{if eq .ActiveTab "overview"}}active{{end}}" href="/admin">Overview</a>
+        <a class="tab-btn {{if eq .ActiveTab "boxes"}}active{{end}}" href="/admin/boxes">Boxes</a>
+        <a class="tab-btn {{if eq .ActiveTab "keys"}}active{{end}}" href="/admin/keys">API Keys</a>
+        <a class="tab-btn {{if eq .ActiveTab "audit"}}active{{end}}" href="/admin/audit">Audit Log</a>
+    </div>
+    {{end}}
+
+    <div class="{{if .IsLoggedIn}}main{{end}}">
+        {{template "content" .}}
+    </div>
+
+    <!-- Drawer -->
+    <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+    <div class="drawer" id="drawer">
+        <h3><span id="drawer-title">Detail</span><button class="close-btn" onclick="closeDrawer()">&times;</button></h3>
+        <div id="drawer-content"></div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal-card" id="modal-card"></div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script src="/static/lib/htmx/htmx.min.js"></script>
+    <script>
+    function escapeHtml(s){
+        if(!s)return '';
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function formatBytes(b){
+        if(b===0)return '0 B';
+        var u=['B','KB','MB','GB'];
+        var i=Math.floor(Math.log(b)/Math.log(1024));
+        return (b/Math.pow(1024,i)).toFixed(i?1:0)+' '+u[i];
+    }
+    function formatDate(s){
+        if(!s)return '-';
+        try{
+            var d=new Date(s);
+            var p=function(n){return n<10?'0'+n:n;};
+            return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+        }catch(e){return s;}
+    }
+    function base64UrlEncode(str){
+        var bytes=new TextEncoder().encode(str);
+        var bin='';
+        for(var i=0;i<bytes.length;i++)bin+=String.fromCharCode(bytes[i]);
+        return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+
+    var _toastTimer;
+    function showToast(msg){
+        var el=document.getElementById('toast');
+        el.textContent=msg;
+        el.classList.add('show');
+        clearTimeout(_toastTimer);
+        _toastTimer=setTimeout(function(){el.classList.remove('show');},3000);
+    }
+
+    function openDrawer(title, contentHtml){
+        document.getElementById('drawer-title').textContent=title;
+        document.getElementById('drawer-content').innerHTML=contentHtml;
+        document.getElementById('drawer').classList.add('open');
+        document.getElementById('drawer-overlay').classList.add('open');
+    }
+    function closeDrawer(){
+        document.getElementById('drawer').classList.remove('open');
+        document.getElementById('drawer-overlay').classList.remove('open');
+    }
+
+    function openModal(html){
+        document.getElementById('modal-card').innerHTML=html;
+        document.getElementById('modal-overlay').classList.add('open');
+    }
+    function closeModal(){
+        document.getElementById('modal-overlay').classList.remove('open');
+        document.getElementById('modal-card').innerHTML='';
+    }
+
+    document.body.addEventListener('htmx:responseError', function(e){
+        showToast('Error: ' + (e.detail.xhr.responseText || 'Request failed'));
+    });
+    document.body.addEventListener('showToast', function(e){
+        showToast(e.detail.value);
+    });
+
+    (function(){
+        var btn=document.getElementById('theme-toggle');
+        if(!btn)return;
+        function updateIcon(){
+            var isDark=document.documentElement.getAttribute('data-theme')!=='light';
+            btn.textContent=isDark?'\u2600\uFE0F':'\uD83C\uDF19';
+        }
+        updateIcon();
+        btn.addEventListener('click',function(){
+            var isDark=document.documentElement.getAttribute('data-theme')!=='light';
+            var next=isDark?'light':'dark';
+            document.documentElement.setAttribute('data-theme',next);
+            localStorage.setItem('stashlock-theme',next);
+            updateIcon();
+        });
+    })();
+    </script>
+    {{template "scripts" .}}
+</body>
+</html>{{end}}
+{{define "scripts"}}{{end}}

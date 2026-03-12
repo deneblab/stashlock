@@ -1,0 +1,36 @@
+{{define "content"}}
+<div class="toolbar">
+    <input type="text" id="audit-box-filter" name="boxKey" placeholder="Box key filter..."
+           hx-get="/admin/audit?handler=Query"
+           hx-trigger="keyup changed delay:300ms"
+           hx-target="#audit-list"
+           hx-swap="innerHTML"
+           hx-include="#audit-action-filter, #audit-limit">
+    <select id="audit-action-filter" name="action"
+            hx-get="/admin/audit?handler=Query"
+            hx-trigger="change"
+            hx-target="#audit-list"
+            hx-swap="innerHTML"
+            hx-include="#audit-box-filter, #audit-limit">
+        <option value="">All actions</option>
+        <option value="get">get</option>
+        <option value="set">set</option>
+        <option value="delete">delete</option>
+    </select>
+    <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px">
+        Limit <input type="number" id="audit-limit" name="limit" value="100" style="width:70px" min="1" max="1000">
+    </label>
+    <button class="btn btn-sm"
+            hx-get="/admin/audit?handler=Query"
+            hx-target="#audit-list"
+            hx-swap="innerHTML"
+            hx-include="#audit-box-filter, #audit-action-filter, #audit-limit">Refresh</button>
+</div>
+
+<div id="audit-list"
+     hx-get="/admin/audit?handler=Query"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+    <div class="spinner"></div>
+</div>
+{{end}}

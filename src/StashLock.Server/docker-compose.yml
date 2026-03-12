@@ -1,0 +1,21 @@
+services:
+  stashlock-servergo:
+    build: .
+    ports:
+      - "8099:8080"
+    environment:
+      - STASHLOCK_PORT=8080
+      - STASHLOCK_WORK_DIR=/app/work
+      - STASHLOCK_API_KEY=${STASHLOCK_API_KEY:-}
+      - STASHLOCK_ALLOWED_ORIGINS=${STASHLOCK_ALLOWED_ORIGINS:-}
+      - STASHLOCK_LOG_DIR=/app/log
+    volumes:
+      - ./app/work:/app/work
+      - ./app/log:/app/log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3

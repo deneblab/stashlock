@@ -1,0 +1,17 @@
+{
+  "BaseVersion": "0.3.0",
+  "Projects": {
+    "server": {
+      "Path": "src/StashLock.Server",
+      "BaseVersion": "2.0.0",
+      "Branches": {
+        "production": {
+          "StartPoint": {
+            "Version": "1.5.0",
+            "ParentSha": "9a254805956b694926ddf341f6a1e60ca57d27cb"
+          }
+        }
+      }
+    }
+  }
+}

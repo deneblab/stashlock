@@ -1,0 +1,34 @@
+{{if not .}}
+<p class="empty-state">No audit entries found.</p>
+{{else if eq (len .) 0}}
+<p class="empty-state">No audit entries found.</p>
+{{else}}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Action</th>
+            <th>Box Key</th>
+            <th>API Key</th>
+            <th>Outcome</th>
+            <th>Detail</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .}}
+        <tr>
+            <td>{{.Id}}</td>
+            <td><span class="badge badge-info">{{.Action}}</span></td>
+            <td class="mono">{{if .BoxKey}}{{.BoxKey}}{{else}}-{{end}}</td>
+            <td>{{if .ApiKeyName}}{{.ApiKeyName}}{{else if .ApiKeyId}}{{.ApiKeyId}}{{else}}-{{end}}</td>
+            <td>
+                {{if eq .Outcome "ok"}}<span class="badge badge-ok">{{.Outcome}}</span>{{else}}<span class="badge badge-err">{{.Outcome}}</span>{{end}}
+            </td>
+            <td>{{if .Detail}}{{.Detail}}{{else}}-{{end}}</td>
+            <td>{{formatDate .OccurredAt}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}

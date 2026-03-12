@@ -1,0 +1,98 @@
+{{define "content"}}
+<div class="toolbar">
+    <input type="text" id="box-search" name="prefix" placeholder="Search by prefix..."
+           hx-get="/admin/boxes?handler=Search"
+           hx-trigger="keyup changed delay:300ms"
+           hx-target="#box-list"
+           hx-swap="innerHTML"
+           hx-include="this">
+    <button class="btn btn-sm"
+            hx-get="/admin/boxes?handler=Search"
+            hx-target="#box-list"
+            hx-swap="innerHTML"
+            hx-include="#box-search">Refresh</button>
+    <button class="btn btn-sm" onclick="openCreateBoxModal()">+ New Secret</button>
+</div>
+
+<div id="box-list"
+     hx-get="/admin/boxes?handler=Search"
+     hx-trigger="load"
+     hx-swap="innerHTML">
+    <div class="spinner"></div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+function openCreateBoxModal(){
+    openModal(
+        '<h3>Create Secret</h3>'+
+        '<form hx-post="/admin/boxes?handler=Create" hx-target="#box-list" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful){closeModal();showToast(\'Secret created\');}">'+
+        '<div class="form-group"><label>Box</label><input type="text" name="box" placeholder="myapp" required></div>'+
+        '<div class="form-group"><label>Tag</label><input type="text" name="tag" placeholder="config" required></div>'+
+        '<div class="form-group"><label>Version</label><input type="text" name="version" placeholder="v1" required></div>'+
+        '<div class="form-group"><label>Value</label><textarea name="value" placeholder="Secret value..." required></textarea></div>'+
+        '<div class="form-group"><label>TTL (seconds, optional)</label><input type="number" name="ttl" placeholder="e.g. 3600 = 1 hour" min="1"></div>'+
+        '<div class="form-actions">'+
+        '<button type="button" class="btn-ghost" onclick="closeModal()">Cancel</button>'+
+        '<button type="submit" class="btn">Create</button>'+
+        '</div></form>'
+    );
+    htmx.process(document.getElementById('modal-card'));
+}
+
+function openBoxDetail(keyText){
+    openDrawer(keyText, '<div class="spinner"></div>');
+    fetch('/admin/boxes?handler=Detail&key='+encodeURIComponent(keyText))
+        .then(function(r){ return r.text(); })
+        .then(function(html){
+            document.getElementById('drawer-content').innerHTML = html;
+            htmx.process(document.getElementById('drawer-content'));
+        })
+        .catch(function(e){
+            document.getElementById('drawer-content').innerHTML = '<p style="color:var(--danger)">Error loading details</p>';
+        });
+}
+
+function confirmDeleteBox(keyText){
+    openModal(
+        '<h3>Delete Secret</h3>'+
+        '<p style="color:var(--text-dim);margin-bottom:16px">Are you sure you want to delete <strong class="mono">'+escapeHtml(keyText)+'</strong>?</p>'+
+        '<div class="form-actions">'+
+        '<button class="btn-ghost" onclick="closeModal()">Cancel</button>'+
+        '<button class="btn-danger" hx-post="/admin/boxes?handler=Delete&key='+encodeURIComponent(keyText)+'" hx-target="#box-list" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful){closeModal();showToast(\'Deleted\');}">Delete</button>'+
+        '</div>'
+    );
+    htmx.process(document.getElementById('modal-card'));
+}
+
+function confirmRestoreVersion(keyText, versionNumber){
+    openModal(
+        '<h3>Restore Version</h3>'+
+        '<p style="color:var(--text-dim);margin-bottom:16px">Restore <strong class="mono">'+escapeHtml(keyText)+'</strong> to version '+versionNumber+'?</p>'+
+        '<div class="form-actions">'+
+        '<button class="btn-ghost" onclick="closeModal()">Cancel</button>'+
+        '<button class="btn" hx-post="/admin/boxes?handler=Restore&key='+encodeURIComponent(keyText)+'&ver='+versionNumber+'" hx-target="#box-list" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful){closeModal();closeDrawer();showToast(\'Restored to v'+versionNumber+'\');}">Restore</button>'+
+        '</div>'
+    );
+    htmx.process(document.getElementById('modal-card'));
+}
+
+function revealBoxValue(keyText, btn){
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+    fetch('/admin/boxes?handler=Value&key='+encodeURIComponent(keyText))
+        .then(function(r){ return r.text(); })
+        .then(function(html){
+            var container = document.getElementById('revealed-value');
+            container.style.display = 'block';
+            container.innerHTML = html;
+            btn.textContent = 'Revealed';
+        })
+        .catch(function(e){
+            btn.textContent = 'Error';
+            showToast('Error loading value');
+        });
+}
+</script>
+{{end}}
