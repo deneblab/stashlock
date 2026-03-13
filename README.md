@@ -85,7 +85,8 @@ var secret = store["Database:Password"];
 
 ### Prerequisites
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (for server and CLI)
+- [Go 1.25+](https://go.dev/dl/) (for building the server from source)
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (for CLI and Client library)
 - [Docker](https://www.docker.com/get-started) (for containerized deployment)
 
 ### Using Docker (Recommended)
@@ -99,7 +100,7 @@ services:
     ports:
       - "8099:8080"
     environment:
-      - StashLock__ApiKey=your-secret-api-key   # remove this line for open access
+      - STASHLOCK_API_KEY=your-secret-api-key   # remove this line for open access
     volumes:
       - ./app/work:/app/work
       - ./app/log:/app/log
@@ -122,15 +123,17 @@ The server will be available at `http://localhost:8099`
 ### Building from Source
 
 1. Clone the repository
-2. Build the solution:
+2. Build the server (Go):
+```bash
+cd src/StashLock.Server
+go build -o stashlock-server .
+./stashlock-server
+```
+
+3. Build CLI and Client (.NET):
 ```bash
 cd src
 dotnet build StashLock.sln
-```
-
-3. Run the server:
-```bash
-dotnet run --project StashLock.Server
 ```
 
 ## Quick Start
@@ -165,7 +168,7 @@ curl http://localhost:8080/
 StashLock supports Bearer token authentication with two key types:
 
 ### Master Key
-Set via configuration (`StashLock:ApiKey`). Has full access to all endpoints including admin operations (API key management, audit logs, stats).
+Set via `STASHLOCK_API_KEY` environment variable or `config.json`. Has full access to all endpoints including admin operations (API key management, audit logs, stats).
 
 ```bash
 curl -H "Authorization: Bearer YOUR_MASTER_KEY" http://localhost:8080/boxes
@@ -189,8 +192,6 @@ curl -X POST http://localhost:8080/keys \
 When no master key is configured, the server runs in **open access mode** (no authentication required).
 
 ## API Documentation
-
-Interactive Swagger UI is available at `/swagger` when the server is running.
 
 ### Endpoints
 
@@ -272,7 +273,7 @@ Errors return:
 
 ## Admin Dashboard
 
-A built-in web dashboard is available at `/dashboard` for managing the vault through a browser.
+A built-in web dashboard is available at `/admin` for managing the vault through a browser.
 
 **Features:**
 - Overview with key counts, storage usage, and health status
@@ -281,45 +282,50 @@ A built-in web dashboard is available at `/dashboard` for managing the vault thr
 - Manage scoped API keys (create, revoke, delete)
 - Query audit logs with filtering
 
-Login with the master API key. The dashboard uses `sessionStorage` — credentials clear when the tab is closed.
+Login with the master API key at `/admin`. The dashboard uses `sessionStorage` — credentials clear when the tab is closed.
 
 ## Configuration
 
-### Server Configuration (`appsettings.json`)
+### Server Configuration
+
+The Go server reads configuration from `config.json` (optional) and environment variables. Environment variables take precedence.
+
+**`config.json` example:**
 
 ```json
 {
-  "StashLock": {
-    "ApiKey": "your-master-api-key",
-    "MaxValueSizeKB": 100,
-    "MaxKeyLength": 120,
-    "MaxRequestBodySizeKB": 110,
-    "DefaultRateLimitPerMinute": 60,
-    "AllowedOrigins": "https://app.example.com"
-  }
+  "port": 8080,
+  "workDir": "./work",
+  "apiKey": "your-master-api-key",
+  "maxValueSizeKB": 100,
+  "maxKeyLength": 120,
+  "maxRequestBodySizeKB": 110,
+  "defaultRateLimitPerMinute": 60,
+  "allowedOrigins": "https://app.example.com",
+  "adminAllowedNetworks": "",
+  "logDir": "./logs",
+  "logLevel": "info"
 }
 ```
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `ApiKey` | *(empty)* | Master API key. Empty = open access mode |
-| `MaxValueSizeKB` | 100 | Maximum value size in KB |
-| `MaxKeyLength` | 120 | Maximum key length in characters |
-| `DefaultRateLimitPerMinute` | 60 | Default rate limit for scoped keys (0 = unlimited) |
-| `AllowedOrigins` | *(empty)* | Comma-separated CORS origins. Empty = allow all |
-
-Settings can also be set via environment variables using double-underscore notation:
-
-```bash
-StashLock__ApiKey=your-master-api-key
-StashLock__DefaultRateLimitPerMinute=120
-```
+| Setting | Env Variable | Default | Description |
+|---------|-------------|---------|-------------|
+| `port` | `STASHLOCK_PORT` | 8080 | Server listen port |
+| `workDir` | `STASHLOCK_WORK_DIR` | `./work` | Working directory (SQLite DB stored in `{workDir}/db/`) |
+| `apiKey` | `STASHLOCK_API_KEY` | *(empty)* | Master API key. Empty = open access mode |
+| `maxValueSizeKB` | `STASHLOCK_MAX_VALUE_SIZE_KB` | 100 | Maximum value size in KB |
+| `maxKeyLength` | — | 120 | Maximum key length in characters |
+| `defaultRateLimitPerMinute` | `STASHLOCK_DEFAULT_RATE_LIMIT` | 60 | Default rate limit for scoped keys |
+| `allowedOrigins` | `STASHLOCK_ALLOWED_ORIGINS` | *(empty)* | Comma-separated CORS origins. Empty = allow all |
+| `adminAllowedNetworks` | `STASHLOCK_ADMIN_NETWORKS` | *(empty)* | CIDR whitelist for admin endpoints |
+| `logDir` | `STASHLOCK_LOG_DIR` | `./logs` | Log file directory |
+| `logLevel` | `STASHLOCK_LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
 
 ### Logging
 
-Application logs are written using NLog with:
-- Console output
-- File-based logging to the logs directory (10 MB rotation, 3 archive files)
+Application logs are written using zerolog with:
+- Console output (human-readable)
+- File-based logging to the log directory with rotation
 
 ## Docker Deployment
 
@@ -352,11 +358,14 @@ Data is stored in bind-mounted directories:
 
 | Variable | Description |
 |----------|-------------|
-| `ASPNETCORE_ENVIRONMENT` | Environment (Development/Production) |
-| `ASPNETCORE_URLS` | Server binding URL (default: `http://+:8080`) |
-| `StashLock__ApiKey` | Master API key for Bearer token auth |
-| `StashLock__DefaultRateLimitPerMinute` | Rate limit for scoped API keys |
-| `StashLock__AllowedOrigins` | Comma-separated CORS origins |
+| `STASHLOCK_PORT` | Server listen port (default: 8080) |
+| `STASHLOCK_WORK_DIR` | Working directory for data (default: `./work`) |
+| `STASHLOCK_API_KEY` | Master API key for Bearer token auth |
+| `STASHLOCK_DEFAULT_RATE_LIMIT` | Rate limit for scoped API keys (per minute) |
+| `STASHLOCK_ALLOWED_ORIGINS` | Comma-separated CORS origins |
+| `STASHLOCK_ADMIN_NETWORKS` | CIDR whitelist for admin endpoints |
+| `STASHLOCK_LOG_DIR` | Log file directory (default: `./logs`) |
+| `STASHLOCK_LOG_LEVEL` | Log level: debug, info, warn, error |
 
 ### Building the Docker Image
 
@@ -370,7 +379,7 @@ docker build -t stashlock-server:latest .
 ```bash
 docker run -d \
   -p 8099:8080 \
-  -e StashLock__ApiKey=your-secret-key \
+  -e STASHLOCK_API_KEY=your-secret-key \
   -v ./app/work:/app/work \
   -v ./app/log:/app/log \
   --name stashlock-server \
@@ -381,13 +390,13 @@ docker run -d \
 
 ### Local Development with .NET Aspire
 
-The project includes an Aspire AppHost for local development orchestration:
+The project includes an Aspire AppHost for local development orchestration (CLI + Client testing):
 
 ```bash
-dotnet run --project src/StashLock.AspireApp/StashLock.AspireApp.AppHost
+dotnet run --project src/AppHost
 ```
 
-This will start the Aspire dashboard and StashLock.Server with proper configuration.
+This will start the Aspire dashboard for monitoring and orchestration.
 
 ### Project Structure
 
@@ -398,7 +407,7 @@ StashLock/
 │   ├── StashLock.Cli/         # Command-line tool
 │   ├── StashLock.Client/      # Client library (.NET 8.0)
 │   ├── StashLock.Tests/       # xUnit integration & unit tests
-│   ├── StashLock.AspireApp/    # .NET Aspire orchestration
+│   ├── AppHost/                # .NET Aspire orchestration
 │   └── build/                 # Nuke build automation
 ├── docker-compose.yml         # Docker Compose configuration
 └── README.md
@@ -445,7 +454,7 @@ Images and packages are tagged with:
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| **401 Unauthorized** | Missing or invalid API key | Check `Authorization: Bearer <key>` header. Verify the key matches `StashLock__ApiKey` or a valid scoped key. |
+| **401 Unauthorized** | Missing or invalid API key | Check `Authorization: Bearer <key>` header. Verify the key matches `STASHLOCK_API_KEY` or a valid scoped key. |
 | **403 Forbidden** | Key lacks required permission or scope | Update the API key's permissions (read/write/delete) or scopes in the dashboard. Use `*` scope for unrestricted access. |
 | **404 Key Not Found** | Key doesn't exist or has been deleted | Use `GET /boxes?prefix=<box>` to list available keys. Check for typos in the `box.tag.version` format. |
 | **429 Too Many Requests** | Rate limit exceeded | Wait and retry after the `Retry-After` header value (seconds). Increase the key's rate limit in the dashboard. |

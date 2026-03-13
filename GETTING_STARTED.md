@@ -21,7 +21,7 @@ services:
     ports:
       - "8099:8080"
     environment:
-      - StashLock__ApiKey=your-secret-api-key   # remove this line for open access
+      - STASHLOCK_API_KEY=your-secret-api-key   # remove this line for open access
     volumes:
       - ./app/work:/app/work
       - ./app/log:/app/log
@@ -34,7 +34,7 @@ services:
       start_period: 10s
 ```
 
-> **Note:** Setting `StashLock__ApiKey` enables authentication. All API requests must include `Authorization: Bearer your-secret-api-key`. Remove the line to run in open access mode (development only). The port `8099` on the host maps to `8080` inside the container.
+> **Note:** Setting `STASHLOCK_API_KEY` enables authentication. All API requests must include `Authorization: Bearer your-secret-api-key`. Remove the line to run in open access mode (development only). The port `8099` on the host maps to `8080` inside the container.
 
 ### 2. Start the server
 
@@ -51,12 +51,11 @@ curl http://localhost:8099/
 
 ### 4. Explore the API
 
-- **Swagger UI:** `http://localhost:8099/swagger`
-- **Dashboard:** `http://localhost:8099/dashboard` (public — no authentication required)
+- **Dashboard:** `http://localhost:8099/admin` (login with master API key)
 
 ### Data persistence
 
-The SQLite database is stored in `/app/work/stashlock.sqlite` inside the container (bind-mounted to `./app/work`). Logs are in `./app/log`. Both persist across container restarts.
+The SQLite database is stored in `/app/work/db/stashlock.sqlite` inside the container (bind-mounted to `./app/work`). Logs are in `./app/log`. Both persist across container restarts.
 
 ---
 
@@ -194,31 +193,31 @@ export STASHLOCK_API_KEY=your-secret-api-key
 
 The private key is the `PrivateKey` value from your `stashlock.key.production.json` file.
 
-### Option A: Standalone API
+### Option A: Standalone API (Fluent Builder)
 
 ```csharp
 using Deneblab.StashLock.Client;
 
-var store = await SecretsStoreAsync.OpenRemoteSealedAsync("myapp", "production", "00001");
+var store = await StashLock.CreateClient()
+    .WithBox("myapp", "production")
+    .OpenAsync();
 
-var dbPassword = await store.GetAsync("Database:Password");
-var apiKey = await store.GetAsync("ExternalApi:Key");
+var dbPassword = store["Database:Password"];
+var apiKey = store["ExternalApi:Key"];
 
-// Or get an entire section as a dictionary
-var dbConfig = await store.GetSectionAsDictionaryAsync("Database");
+// Or get a typed section
+var dbConfig = store.GetSection<Dictionary<string, string>>("Database");
 ```
 
 ### Option B: IConfiguration integration
 
 ```csharp
-using Deneblab.StashLock.Client.Configuration;
+using Deneblab.StashLock.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddStashLockRemote(
-    box: "myapp",
-    tag: "production",
-    version: "00001");
+builder.Configuration.AddStashLock(cfg => cfg
+    .WithBox("myapp", "production"));
 
 var app = builder.Build();
 
@@ -233,8 +232,10 @@ using Deneblab.StashLock.Client;
 
 try
 {
-    var store = await SecretsStoreAsync.OpenRemoteSealedAsync("myapp", "production", "00001");
-    var secret = await store.GetAsync("Database:Password");
+    var store = await StashLock.CreateClient()
+        .WithBox("myapp", "production")
+        .OpenAsync();
+    var secret = store["Database:Password"];
 }
 catch (VaultConfigurationException ex)
 {
@@ -255,7 +256,9 @@ catch (DecryptionException ex)
 For local development, skip the server entirely with a plain JSON file:
 
 ```csharp
-var store = await SecretsStoreAsync.TryOpenDevFileAsync();
+var store = await StashLock.CreateClient()
+    .FromDevFile()
+    .OpenAsync();
 ```
 
 This auto-discovers `dev/secrets/secrets.json` relative to the project root when running in Dev or Test mode.
@@ -290,7 +293,7 @@ Applications only need the **private key** to decrypt — not the full key file:
 export STASHLOCK_PRIVATE_KEY=<base64-encoded-private-key>
 ```
 
-3. The application uses `OpenRemoteSealedAsync()` or `AddStashLockRemote()` to fetch and decrypt at runtime
+3. The application uses `StashLock.CreateClient().WithBox().OpenAsync()` or `AddStashLock()` to fetch and decrypt at runtime
 
 ### Security rules
 
@@ -328,7 +331,7 @@ This overwrites the previous encrypted values on the server. The server automati
 
 ### 3. Restart or wait for your application
 
-Applications fetch secrets when they call `OpenRemoteSealedAsync()` — typically at startup. To pick up the new values:
+Applications fetch secrets when they call `OpenAsync()` — typically at startup. To pick up the new values:
 - **Restart** the application, or
 - Implement periodic refresh in your code
 
@@ -368,8 +371,8 @@ stashlock publish ./vault                          # 3. Upload to server
 
 # In your app
 dotnet add package Deneblab.StashLock.Client       # 4. Install client
-# Set STASHLOCK_PRIVATE_KEY, STASHLOCK_API_URL, STASHLOCK_API_KEY
-# Use SecretsStoreAsync.OpenRemoteSealedAsync() or AddStashLockRemote()
+# Set STASHLOCK_CONNECTION_STRING (or individual env vars)
+# Use StashLock.CreateClient().WithBox().OpenAsync() or AddStashLock()
 ```
 
 ## Links

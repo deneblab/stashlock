@@ -13,9 +13,8 @@ dotnet add package Deneblab.StashLock.Client
 ```csharp
 using Deneblab.StashLock.Client;
 
-// From environment variable STASHLOCK_VAULT_KEY
+// Auto-reads STASHLOCK_CONNECTION_STRING env var
 var store = await StashLock.CreateClient()
-    .FromEnvironment()
     .OpenAsync();
 
 var dbPassword = store["Database:Password"];
@@ -264,7 +263,6 @@ public class MyService(ISecretsStore secrets)
 try
 {
     var store = await StashLock.CreateClient()
-        .FromEnvironment()
         .OpenAsync();
 }
 catch (VaultConfigurationException ex)
