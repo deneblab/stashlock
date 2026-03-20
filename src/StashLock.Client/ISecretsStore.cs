@@ -1,6 +1,4 @@
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Deneblab.StashLock.Client;
 
@@ -10,21 +8,12 @@ namespace Deneblab.StashLock.Client;
 public interface ISecretsStore
 {
     /// <summary>
-    /// Gets a secret value by key synchronously.
+    /// Gets a secret value by key.
     /// </summary>
     /// <param name="key">The secret key</param>
     /// <returns>The secret value</returns>
     /// <exception cref="System.Collections.Generic.KeyNotFoundException">Thrown when key is not found</exception>
     string this[string key] { get; }
-
-    /// <summary>
-    /// Gets a secret value by key asynchronously.
-    /// </summary>
-    /// <param name="key">The secret key</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>The secret value</returns>
-    /// <exception cref="System.Collections.Generic.KeyNotFoundException">Thrown when key is not found</exception>
-    Task<string> GetAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Tries to get a secret value by key without throwing.
@@ -35,12 +24,11 @@ public interface ISecretsStore
     bool TryGet(string key, out string value);
 
     /// <summary>
-    /// Gets a section of secrets by prefix asynchronously.
+    /// Gets a section of secrets by prefix.
     /// </summary>
     /// <param name="sectionPrefix">The section prefix (with or without trailing ':')</param>
-    /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Dictionary of secrets in the section</returns>
-    Task<Dictionary<string, string>> GetSectionAsDictionaryAsync(string sectionPrefix, CancellationToken cancellationToken = default);
+    Dictionary<string, string> GetSectionAsDictionary(string sectionPrefix);
 
     /// <summary>
     /// Gets a section of secrets and deserializes into a typed object.

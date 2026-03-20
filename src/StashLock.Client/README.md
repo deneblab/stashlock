@@ -157,11 +157,8 @@ if (!result.IsValid)
 ## Reading Secrets
 
 ```csharp
-// Indexer (synchronous — secrets are pre-loaded)
+// Indexer (secrets are pre-loaded in memory)
 string value = store["Database:Password"];
-
-// Async
-string value = await store.GetAsync("Database:Password");
 
 // TryGet (no exception on missing key)
 if (store.TryGet("OptionalKey", out var value))
@@ -170,7 +167,7 @@ if (store.TryGet("OptionalKey", out var value))
 }
 
 // Section as dictionary
-var dbConfig = await store.GetSectionAsDictionaryAsync("Database");
+var dbConfig = store.GetSectionAsDictionary("Database");
 // Returns: { "Host": "localhost", "Password": "secret", ... }
 
 // Typed section (deserializes into a POCO)

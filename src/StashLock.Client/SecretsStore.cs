@@ -54,14 +54,6 @@ internal class SecretsStore : ISecretsStore
     }
 
     /// <summary>
-    ///     Gets a secret value asynchronously.
-    /// </summary>
-    public Task<string> GetAsync(string key, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(this[key]);
-    }
-
-    /// <summary>
     ///     Tries to get a secret value by key without throwing.
     /// </summary>
     public bool TryGet(string key, out string value)
@@ -76,10 +68,9 @@ internal class SecretsStore : ISecretsStore
     }
 
     /// <summary>
-    ///     Gets a section of secrets asynchronously.
+    ///     Gets a section of secrets by prefix.
     /// </summary>
-    public Task<Dictionary<string, string>> GetSectionAsDictionaryAsync(string sectionPrefix,
-        CancellationToken cancellationToken = default)
+    public Dictionary<string, string> GetSectionAsDictionary(string sectionPrefix)
     {
         if (string.IsNullOrWhiteSpace(sectionPrefix))
             throw new ArgumentNullException(nameof(sectionPrefix));
@@ -94,7 +85,7 @@ internal class SecretsStore : ISecretsStore
                 dic[newKey] = kv.Value;
             }
 
-        return Task.FromResult(dic);
+        return dic;
     }
 
     /// <summary>
@@ -102,7 +93,7 @@ internal class SecretsStore : ISecretsStore
     /// </summary>
     public T GetSection<T>(string sectionPrefix)
     {
-        var section = GetSectionAsDictionaryAsync(sectionPrefix).GetAwaiter().GetResult();
+        var section = GetSectionAsDictionary(sectionPrefix);
         var json = JsonSerializer.Serialize(section);
         return JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     }
