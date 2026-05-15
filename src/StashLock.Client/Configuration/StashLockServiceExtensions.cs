@@ -1,5 +1,6 @@
 using System;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Deneblab.StashLock.Client.Configuration;
 
@@ -30,6 +31,13 @@ public static class StashLockServiceExtensions
         services.AddSingleton<ISecretsStore>(sp =>
         {
             var builder = new StashLockBuilder();
+
+            // Auto-wire the host logger factory if one is registered. Applied before
+            // configure() so an explicit .WithLoggerFactory(...) in the delegate wins.
+            var loggerFactory = sp.GetService<ILoggerFactory>();
+            if (loggerFactory != null)
+                builder.WithLoggerFactory(loggerFactory);
+
             configure(builder);
             return builder.OpenAsync().GetAwaiter().GetResult();
         });

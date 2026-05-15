@@ -2,6 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Deneblab.StashLock.Client.Common.Exceptions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Deneblab.StashLock.Client;
 
@@ -30,6 +32,7 @@ public class StashLockBuilder
     internal string FilePath { get; private set; }
     internal CacheOptions CacheOpts { get; private set; }
     internal TimeSpan? Timeout { get; private set; }
+    internal ILoggerFactory LoggerFactory { get; private set; }
 
     internal StashLockBuilder()
     {
@@ -203,6 +206,36 @@ public class StashLockBuilder
     }
 
     /// <summary>
+    /// Attach an <see cref="ILoggerFactory"/> so the client can emit structured logs
+    /// (preferred — lets the client create per-category loggers). No logging occurs
+    /// when unset (a no-op logger is used). Never logs secret values or key material.
+    /// </summary>
+    public StashLockBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
+    {
+        LoggerFactory = loggerFactory;
+        return this;
+    }
+
+    /// <summary>
+    /// Attach a single <see cref="ILogger"/>. Convenience wrapper over
+    /// <see cref="WithLoggerFactory"/>; the same logger is used for every category.
+    /// </summary>
+    public StashLockBuilder WithLogger(ILogger logger)
+    {
+        LoggerFactory = logger == null ? null : new SingleLoggerFactory(logger);
+        return this;
+    }
+
+    private sealed class SingleLoggerFactory : ILoggerFactory
+    {
+        private readonly ILogger _logger;
+        public SingleLoggerFactory(ILogger logger) => _logger = logger;
+        public ILogger CreateLogger(string categoryName) => _logger;
+        public void AddProvider(ILoggerProvider provider) { }
+        public void Dispose() { }
+    }
+
+    /// <summary>
     /// Open the secrets store using the configured source.
     /// </summary>
     public async Task<ISecretsStore> OpenAsync(CancellationToken cancellationToken = default)
@@ -210,38 +243,69 @@ public class StashLockBuilder
         ApplyConnectionStringDefaults();
 
         var effectiveTimeout = ResolveTimeout();
+        var log = (LoggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Deneblab.StashLock.Client");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        log.LogInformation(
+            "StashLock open starting: mode={Mode} box={Box} tag={Tag} version={Version} timeout={TimeoutMs}ms",
+            Mode, Box, Tag, Version, (int)effectiveTimeout.TotalMilliseconds);
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(effectiveTimeout);
         var token = cts.Token;
 
-        switch (Mode)
+        try
         {
-            case SourceMode.Box:
-                if (CacheOpts != null)
-                    return await SecretsStore.OpenRemoteSealedWithCacheAsync(
-                        Box, Tag, Version, CacheOpts, PrivateKeyBase64, ApiUrl, ApiKey, cancellationToken);
-                return await SecretsStore.OpenRemoteSealedAsync(
-                    Box, Tag, Version, PrivateKeyBase64, ApiUrl, ApiKey, token);
+            ISecretsStore result;
+            switch (Mode)
+            {
+                case SourceMode.Box:
+                    if (CacheOpts != null)
+                        result = await SecretsStore.OpenRemoteSealedWithCacheAsync(
+                            Box, Tag, Version, CacheOpts, PrivateKeyBase64, ApiUrl, ApiKey, cancellationToken);
+                    else
+                        result = await SecretsStore.OpenRemoteSealedAsync(
+                            Box, Tag, Version, PrivateKeyBase64, ApiUrl, ApiKey, token);
+                    break;
 
-            case SourceMode.DevFile:
-                if (string.IsNullOrEmpty(FilePath))
-                {
-                    var store = await SecretsStore.TryOpenDevFileAsync(token);
-                    if (store == null)
-                        throw new StashLockException("No dev secrets file found. Provide an explicit file path via FromDevFile(path).");
-                    return store;
-                }
-                return await SecretsStore.OpenFileAsync(FilePath, token);
+                case SourceMode.DevFile:
+                    if (string.IsNullOrEmpty(FilePath))
+                    {
+                        var store = await SecretsStore.TryOpenDevFileAsync(token);
+                        if (store == null)
+                            throw new StashLockException("No dev secrets file found. Provide an explicit file path via FromDevFile(path).");
+                        result = store;
+                    }
+                    else
+                    {
+                        result = await SecretsStore.OpenFileAsync(FilePath, token);
+                    }
+                    break;
 
-            case SourceMode.EncryptedFile:
-                return await SecretsStore.OpenEncryptedFileAsync(FilePath, PrivateKeyBase64, token);
+                case SourceMode.EncryptedFile:
+                    result = await SecretsStore.OpenEncryptedFileAsync(FilePath, PrivateKeyBase64, token);
+                    break;
 
-            case SourceMode.PlainFile:
-                return await SecretsStore.OpenFileAsync(FilePath, token);
+                case SourceMode.PlainFile:
+                    result = await SecretsStore.OpenFileAsync(FilePath, token);
+                    break;
 
-            default:
-                throw new StashLockException(
-                    "No source configured. Call WithConnectionString(), WithBox(), FromDevFile(), FromEncryptedFile(), or FromFile() before OpenAsync().");
+                default:
+                    throw new StashLockException(
+                        "No source configured. Call WithConnectionString(), WithBox(), FromDevFile(), FromEncryptedFile(), or FromFile() before OpenAsync().");
+            }
+
+            log.LogInformation(
+                "StashLock open succeeded: mode={Mode} box={Box} tag={Tag} version={Version} elapsed={ElapsedMs}ms",
+                Mode, Box, Tag, Version, sw.ElapsedMilliseconds);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            log.LogError(ex,
+                "StashLock open failed: mode={Mode} box={Box} tag={Tag} version={Version} error={ErrorType} elapsed={ElapsedMs}ms",
+                Mode, Box, Tag, Version, ex.GetType().Name, sw.ElapsedMilliseconds);
+            throw;
         }
     }
 
