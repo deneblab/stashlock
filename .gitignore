@@ -21,6 +21,7 @@ _dotCover.*
 *.ide
 *nunit.TestResult.*.xml
 *.vsp
+*.lscache
 
 # Visual Studio build objects
 bin/
@@ -66,3 +67,4 @@ nupkg/*
 .devcontainer/.cache/
 .agents/*
 .claude/*   
+src/.github/
