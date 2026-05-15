@@ -463,6 +463,12 @@ internal class SecretsStore : ISecretsStore
             try
             {
                 var cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey);
+
+                // ServerFirstOutdatedCacheOnError: if no fresh entry, accept an
+                // outdated (TTL-expired) one rather than re-throwing.
+                if (cached == null && opts.Strategy == CacheStrategy.ServerFirstOutdatedCacheOnError)
+                    cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey, ignoreTtl: true);
+
                 if (cached != null)
                     return FromPlainDictionary(cached);
             }

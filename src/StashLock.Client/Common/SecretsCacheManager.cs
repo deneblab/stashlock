@@ -80,9 +80,12 @@ internal static class SecretsCacheManager
     }
 
     /// <summary>
-    /// Reads and decrypts a cache file. Returns null if expired, corrupted, or missing.
+    /// Reads and decrypts a cache file. Returns null if corrupted or missing.
+    /// Also returns null when the entry has expired, unless <paramref name="ignoreTtl"/>
+    /// is true (used by the ServerFirstOutdatedCacheOnError strategy to serve an
+    /// outdated entry when the server is unreachable).
     /// </summary>
-    internal static Dictionary<string, string> ReadCache(string filePath, byte[] cacheKey)
+    internal static Dictionary<string, string> ReadCache(string filePath, byte[] cacheKey, bool ignoreTtl = false)
     {
         if (!File.Exists(filePath))
             return null;
@@ -105,11 +108,14 @@ internal static class SecretsCacheManager
             var ciphertext = br.ReadBytes(ciphertextLength);
             var tag = br.ReadBytes(TagSize);
 
-            // Check TTL
-            var created = new DateTimeOffset(createdTicks, TimeSpan.Zero);
-            var expiry = created.AddSeconds(ttlSeconds);
-            if (DateTimeOffset.UtcNow > expiry)
-                return null;
+            // Check TTL (skipped when the caller explicitly accepts an outdated entry)
+            if (!ignoreTtl)
+            {
+                var created = new DateTimeOffset(createdTicks, TimeSpan.Zero);
+                var expiry = created.AddSeconds(ttlSeconds);
+                if (DateTimeOffset.UtcNow > expiry)
+                    return null;
+            }
 
             // Validate sizes
             if (nonce.Length != NonceSize || tag.Length != TagSize || ciphertext.Length != ciphertextLength)

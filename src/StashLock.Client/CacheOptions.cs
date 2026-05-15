@@ -16,7 +16,16 @@ public enum CacheStrategy
     /// Try the cache first; fetch from server only if cache is missing or expired.
     /// Best for edge deployments or environments with poor connectivity.
     /// </summary>
-    CacheFirst = 1
+    CacheFirst = 1,
+
+    /// <summary>
+    /// Try the server first; on error, use the outdated cache. Behaves exactly like
+    /// <see cref="ServerFirst"/>, except that when the server is unreachable and the
+    /// cached entry exists but has expired (past its TTL), the outdated entry is served
+    /// instead of throwing. Use for offline resilience past the cache TTL.
+    /// A wrong decryption key still throws and is never masked by the cache.
+    /// </summary>
+    ServerFirstOutdatedCacheOnError = 2
 }
 
 /// <summary>
