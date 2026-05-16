@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Deneblab.StashLock.Client.Common.Exceptions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Deneblab.StashLock.Client.Modules.Web;
 
@@ -19,15 +21,17 @@ public class StashLockHttpClient : IDisposable
 
     private readonly string _baseUrl;
     private readonly string _apiKey;
+    private readonly ILogger _log;
     private bool _disposed;
 
-    public StashLockHttpClient(string baseUrl, string apiKey = null)
+    public StashLockHttpClient(string baseUrl, string apiKey = null, ILogger logger = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new VaultConfigurationException("BaseUrl", "API base URL cannot be null or empty");
 
         _baseUrl = baseUrl.TrimEnd('/');
         _apiKey = apiKey;
+        _log = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -53,17 +57,22 @@ public class StashLockHttpClient : IDisposable
         }
         request.Headers.Add("Accept", "text/plain");
 
+        _log.LogDebug("HTTP GET {Path}", $"/boxes/{key}");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             var response = await SharedHttpClient.SendAsync(request, cancellationToken);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
+                _log.LogWarning("HTTP GET {Path} -> 404 NotFound ({ElapsedMs}ms)", $"/boxes/{key}", sw.ElapsedMilliseconds);
                 throw new VaultNotFoundException(key);
             }
 
             response.EnsureSuccessStatusCode();
 
+            _log.LogInformation("HTTP GET {Path} -> {StatusCode} ({ElapsedMs}ms)",
+                $"/boxes/{key}", (int)response.StatusCode, sw.ElapsedMilliseconds);
             return await response.Content.ReadAsStringAsync(cancellationToken);
         }
         catch (VaultNotFoundException)
@@ -72,10 +81,12 @@ public class StashLockHttpClient : IDisposable
         }
         catch (HttpRequestException ex)
         {
+            _log.LogError("HTTP GET {Path} failed: connection error ({ElapsedMs}ms)", $"/boxes/{key}", sw.ElapsedMilliseconds);
             throw new StashLockException($"Failed to retrieve vault entry for key '{key}': {ex.Message}", ex);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
+            _log.LogError("HTTP GET {Path} failed: timeout ({ElapsedMs}ms)", $"/boxes/{key}", sw.ElapsedMilliseconds);
             throw new StashLockException($"Request timeout while retrieving vault entry for key '{key}'", ex);
         }
     }
@@ -105,17 +116,23 @@ public class StashLockHttpClient : IDisposable
 
         request.Content = new StringContent(encryptedData, System.Text.Encoding.UTF8, "text/plain");
 
+        _log.LogDebug("HTTP POST {Path}", $"/boxes/{key}");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             var response = await SharedHttpClient.SendAsync(request, cancellationToken);
             response.EnsureSuccessStatusCode();
+            _log.LogInformation("HTTP POST {Path} -> {StatusCode} ({ElapsedMs}ms)",
+                $"/boxes/{key}", (int)response.StatusCode, sw.ElapsedMilliseconds);
         }
         catch (HttpRequestException ex)
         {
+            _log.LogError("HTTP POST {Path} failed: connection error ({ElapsedMs}ms)", $"/boxes/{key}", sw.ElapsedMilliseconds);
             throw new StashLockException($"Failed to set vault entry for key '{key}': {ex.Message}", ex);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
+            _log.LogError("HTTP POST {Path} failed: timeout ({ElapsedMs}ms)", $"/boxes/{key}", sw.ElapsedMilliseconds);
             throw new StashLockException($"Request timeout while setting vault entry for key '{key}'", ex);
         }
     }

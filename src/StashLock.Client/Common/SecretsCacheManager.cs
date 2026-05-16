@@ -4,6 +4,8 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Deneblab.StashLock.Client.Common;
 
@@ -33,8 +35,9 @@ internal static class SecretsCacheManager
     /// <summary>
     /// Writes an encrypted cache file using AES-256-GCM. Uses atomic write (temp + rename).
     /// </summary>
-    internal static void WriteCache(string filePath, Dictionary<string, string> secrets, byte[] cacheKey, TimeSpan ttl)
+    internal static void WriteCache(string filePath, Dictionary<string, string> secrets, byte[] cacheKey, TimeSpan ttl, ILogger logger = null)
     {
+        var log = logger ?? NullLogger.Instance;
         var json = JsonSerializer.Serialize(secrets);
         var plaintext = Encoding.UTF8.GetBytes(json);
 
@@ -71,6 +74,8 @@ internal static class SecretsCacheManager
 
             // Replace target atomically
             File.Move(tempPath, filePath, overwrite: true);
+            log.LogDebug("Cache write {File} ({Count} entries, ttl {TtlSec}s)",
+                Path.GetFileName(filePath), secrets.Count, (int)ttl.TotalSeconds);
         }
         finally
         {
@@ -85,10 +90,16 @@ internal static class SecretsCacheManager
     /// is true (used by the ServerFirstOutdatedCacheOnError strategy to serve an
     /// outdated entry when the server is unreachable).
     /// </summary>
-    internal static Dictionary<string, string> ReadCache(string filePath, byte[] cacheKey, bool ignoreTtl = false)
+    internal static Dictionary<string, string> ReadCache(string filePath, byte[] cacheKey, bool ignoreTtl = false, ILogger logger = null)
     {
+        var log = logger ?? NullLogger.Instance;
+        var file = Path.GetFileName(filePath);
+
         if (!File.Exists(filePath))
+        {
+            log.LogDebug("Cache miss {File}: not present", file);
             return null;
+        }
 
         try
         {
@@ -114,7 +125,10 @@ internal static class SecretsCacheManager
                 var created = new DateTimeOffset(createdTicks, TimeSpan.Zero);
                 var expiry = created.AddSeconds(ttlSeconds);
                 if (DateTimeOffset.UtcNow > expiry)
+                {
+                    log.LogDebug("Cache miss {File}: expired", file);
                     return null;
+                }
             }
 
             // Validate sizes
@@ -129,11 +143,15 @@ internal static class SecretsCacheManager
             }
 
             var json = Encoding.UTF8.GetString(plaintext);
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            var result = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+            log.LogDebug("Cache hit {File} ({Count} entries{Outdated})",
+                file, result?.Count ?? 0, ignoreTtl ? ", outdated-accepted" : "");
+            return result;
         }
         catch
         {
-            // Corrupted or wrong key — silently return null
+            // Corrupted or wrong key — return null (no key/secret material in the log)
+            log.LogWarning("Cache miss {File}: unreadable (corrupt or wrong key)", file);
             return null;
         }
     }

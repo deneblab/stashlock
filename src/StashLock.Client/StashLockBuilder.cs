@@ -262,10 +262,10 @@ public class StashLockBuilder
                 case SourceMode.Box:
                     if (CacheOpts != null)
                         result = await SecretsStore.OpenRemoteSealedWithCacheAsync(
-                            Box, Tag, Version, CacheOpts, PrivateKeyBase64, ApiUrl, ApiKey, cancellationToken);
+                            Box, Tag, Version, CacheOpts, PrivateKeyBase64, ApiUrl, ApiKey, cancellationToken, LoggerFactory);
                     else
                         result = await SecretsStore.OpenRemoteSealedAsync(
-                            Box, Tag, Version, PrivateKeyBase64, ApiUrl, ApiKey, token);
+                            Box, Tag, Version, PrivateKeyBase64, ApiUrl, ApiKey, token, LoggerFactory);
                     break;
 
                 case SourceMode.DevFile:

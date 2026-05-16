@@ -10,6 +10,8 @@ using Deneblab.StashLock.Client.Common;
 using Deneblab.StashLock.Client.Common.Exceptions;
 using Deneblab.StashLock.Client.Common.Simple;
 using Deneblab.StashLock.Client.Modules.Web;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Deneblab.StashLock.Client;
 
@@ -295,11 +297,15 @@ internal class SecretsStore : ISecretsStore
         string privateKeyBase64 = null,
         string apiUrl = null,
         string apiKey = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ILoggerFactory loggerFactory = null)
     {
         if (string.IsNullOrWhiteSpace(box)) throw new ArgumentNullException(nameof(box));
         if (string.IsNullOrWhiteSpace(tag)) throw new ArgumentNullException(nameof(tag));
         if (string.IsNullOrWhiteSpace(version)) throw new ArgumentNullException(nameof(version));
+
+        var lf = loggerFactory ?? NullLoggerFactory.Instance;
+        var log = lf.CreateLogger("Deneblab.StashLock.Client.Remote");
 
         var resolvedPrivateKey = privateKeyBase64
             ?? Environment.GetEnvironmentVariable(ENV_PRIVATE_KEY);
@@ -336,19 +342,22 @@ internal class SecretsStore : ISecretsStore
 
         try
         {
-            var httpClient = new Modules.Web.StashLockHttpClient(resolvedApiUrl, resolvedApiKey);
+            var httpClient = new Modules.Web.StashLockHttpClient(resolvedApiUrl, resolvedApiKey,
+                lf.CreateLogger("Deneblab.StashLock.Client.Http"));
             var encryptedBase64 = await httpClient.GetAsync(webKeySafeUrl, cancellationToken);
 
             // Auto-detect: try SOPS/whole-file JSON first, fall back to raw ECIES blob
             var dictionary = Common.SopsDecryptor.DecryptAutoDetect(encryptedBase64, privateKeyBytes);
+            log.LogInformation("Opened remote vault {Box}.{Tag}.{Version} ({Count} entries)", box, tag, version, dictionary.Count);
             return FromPlainDictionary(dictionary);
         }
         catch (Common.Exceptions.VaultNotFoundException)
         {
             throw;
         }
-        catch (Common.Exceptions.DecryptionException)
+        catch (Common.Exceptions.DecryptionException ex)
         {
+            log.LogError("Decryption failed for {Box}.{Tag}.{Version}: {ErrorType} (wrong key?)", box, tag, version, ex.GetType().Name);
             throw;
         }
         catch (Exception ex) when (ex is not Common.Exceptions.StashLockException)
@@ -372,7 +381,8 @@ internal class SecretsStore : ISecretsStore
         string privateKeyBase64 = null,
         string apiUrl = null,
         string apiKey = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ILoggerFactory loggerFactory = null)
     {
         if (string.IsNullOrWhiteSpace(box)) throw new ArgumentNullException(nameof(box));
         if (string.IsNullOrWhiteSpace(tag)) throw new ArgumentNullException(nameof(tag));
@@ -413,18 +423,22 @@ internal class SecretsStore : ISecretsStore
 
         if (opts.Strategy == CacheStrategy.CacheFirst)
             return await OpenCacheFirstAsync(box, tag, version, privateKeyBase64, apiUrl, apiKey,
-                opts, cacheFilePath, cacheKey, cancellationToken);
+                opts, cacheFilePath, cacheKey, cancellationToken, loggerFactory);
 
         return await OpenServerFirstAsync(box, tag, version, privateKeyBase64, apiUrl, apiKey,
-            opts, cacheFilePath, cacheKey, cancellationToken);
+            opts, cacheFilePath, cacheKey, cancellationToken, loggerFactory);
     }
 
     private static async Task<ISecretsStore> OpenServerFirstAsync(
         string box, string tag, string version,
         string privateKeyBase64, string apiUrl, string apiKey,
         CacheOptions opts, string cacheFilePath, byte[] cacheKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ILoggerFactory loggerFactory = null)
     {
+        var cacheLog = (loggerFactory ?? NullLoggerFactory.Instance)
+            .CreateLogger("Deneblab.StashLock.Client.Cache");
+
         // Create a timeout-scoped token for the server call
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(opts.ServerTimeout);
@@ -432,13 +446,13 @@ internal class SecretsStore : ISecretsStore
         try
         {
             // 1. Try server first
-            var store = await OpenRemoteSealedAsync(box, tag, version, privateKeyBase64, apiUrl, apiKey, cts.Token);
+            var store = await OpenRemoteSealedAsync(box, tag, version, privateKeyBase64, apiUrl, apiKey, cts.Token, loggerFactory);
 
             // 2. On success, update cache
             try
             {
                 var secrets = ((SecretsStore)store).ToDictionary();
-                SecretsCacheManager.WriteCache(cacheFilePath, secrets, cacheKey, opts.CacheTtl);
+                SecretsCacheManager.WriteCache(cacheFilePath, secrets, cacheKey, opts.CacheTtl, cacheLog);
             }
             catch
             {
@@ -460,14 +474,23 @@ internal class SecretsStore : ISecretsStore
         catch (Exception ex) when (ex is not StashLockException || ex is StashLockException { InnerException: not null })
         {
             // 3. Server failed — try cache fallback
+            cacheLog.LogWarning("Server unreachable for {Box}.{Tag}.{Version}; attempting cache fallback", box, tag, version);
             try
             {
-                var cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey);
+                var cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey, logger: cacheLog);
 
                 // ServerFirstOutdatedCacheOnError: if no fresh entry, accept an
                 // outdated (TTL-expired) one rather than re-throwing.
                 if (cached == null && opts.Strategy == CacheStrategy.ServerFirstOutdatedCacheOnError)
-                    cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey, ignoreTtl: true);
+                {
+                    cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey, ignoreTtl: true, logger: cacheLog);
+                    if (cached != null)
+                        cacheLog.LogWarning("Serving OUTDATED cache for {Box}.{Tag}.{Version} (server unreachable)", box, tag, version);
+                }
+                else if (cached != null)
+                {
+                    cacheLog.LogInformation("Served fresh cache fallback for {Box}.{Tag}.{Version}", box, tag, version);
+                }
 
                 if (cached != null)
                     return FromPlainDictionary(cached);
@@ -490,15 +513,20 @@ internal class SecretsStore : ISecretsStore
         string box, string tag, string version,
         string privateKeyBase64, string apiUrl, string apiKey,
         CacheOptions opts, string cacheFilePath, byte[] cacheKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ILoggerFactory loggerFactory = null)
     {
+        var cacheLog = (loggerFactory ?? NullLoggerFactory.Instance)
+            .CreateLogger("Deneblab.StashLock.Client.Cache");
+
         // 1. Try cache first
         try
         {
-            var cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey);
+            var cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey, logger: cacheLog);
             if (cached != null)
             {
                 CryptographicOperations.ZeroMemory(cacheKey);
+                cacheLog.LogInformation("CacheFirst hit for {Box}.{Tag}.{Version}; skipping server", box, tag, version);
                 return FromPlainDictionary(cached);
             }
         }
@@ -508,18 +536,19 @@ internal class SecretsStore : ISecretsStore
         }
 
         // 2. Cache miss or expired — fetch from server with timeout
+        cacheLog.LogDebug("CacheFirst miss for {Box}.{Tag}.{Version}; fetching from server", box, tag, version);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(opts.ServerTimeout);
 
         try
         {
-            var store = await OpenRemoteSealedAsync(box, tag, version, privateKeyBase64, apiUrl, apiKey, cts.Token);
+            var store = await OpenRemoteSealedAsync(box, tag, version, privateKeyBase64, apiUrl, apiKey, cts.Token, loggerFactory);
 
             // 3. On success, update cache
             try
             {
                 var secrets = ((SecretsStore)store).ToDictionary();
-                SecretsCacheManager.WriteCache(cacheFilePath, secrets, cacheKey, opts.CacheTtl);
+                SecretsCacheManager.WriteCache(cacheFilePath, secrets, cacheKey, opts.CacheTtl, cacheLog);
             }
             catch
             {
