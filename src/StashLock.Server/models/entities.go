@@ -38,6 +38,7 @@ type ApiKeyEntity struct {
 	ExpiresAt          sql.NullString `db:"ExpiresAt"`
 	RateLimitPerMinute sql.NullInt64  `db:"RateLimitPerMinute"`
 	CreatedAt          string         `db:"CreatedAt"`
+	LastUsedAt         sql.NullString `db:"LastUsedAt"`
 }
 
 // AuditLogEntity maps to the AuditLogs table.

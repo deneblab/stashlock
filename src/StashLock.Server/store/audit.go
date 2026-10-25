@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -46,6 +47,67 @@ type AuditEntry struct {
 	OccurredAt    string `json:"occurredAt" db:"OccurredAt"`
 	Outcome       string `json:"outcome" db:"Outcome"`
 	Detail        string `json:"detail,omitempty" db:"Detail"`
+}
+
+// AuditFilter selects audit entries for the dashboard.
+type AuditFilter struct {
+	Action string
+	BoxKey string // prefix match, e.g. "exampleapp.develop"
+	Key    string // matches ApiKeyName or ApiKeyId prefix
+	From   string // YYYY-MM-DD, inclusive (UTC)
+	To     string // YYYY-MM-DD, inclusive (UTC)
+	Limit  int
+	Offset int
+}
+
+// QueryPage returns one page of audit entries (newest first) and the total match count.
+func (s *AuditStore) QueryPage(f AuditFilter) ([]AuditEntry, int, error) {
+	where := []string{"1=1"}
+	var args []interface{}
+	if f.Action != "" {
+		where = append(where, "Action = ?")
+		args = append(args, f.Action)
+	}
+	if f.BoxKey != "" {
+		where = append(where, `BoxKey LIKE ? ESCAPE '\'`)
+		args = append(args, escapeLike(f.BoxKey)+"%")
+	}
+	if f.Key != "" {
+		where = append(where, `(ApiKeyName LIKE ? ESCAPE '\' OR ApiKeyId LIKE ? ESCAPE '\')`)
+		args = append(args, "%"+escapeLike(f.Key)+"%", escapeLike(f.Key)+"%")
+	}
+	if t, err := time.Parse("2006-01-02", f.From); err == nil {
+		where = append(where, "OccurredAt >= ?")
+		args = append(args, t.UTC().Format(time.RFC3339Nano))
+	}
+	if t, err := time.Parse("2006-01-02", f.To); err == nil {
+		where = append(where, "OccurredAt < ?")
+		args = append(args, t.Add(24*time.Hour).UTC().Format(time.RFC3339Nano))
+	}
+	cond := strings.Join(where, " AND ")
+
+	var total int
+	if err := s.db.Get(&total, "SELECT COUNT(*) FROM AuditLogs WHERE "+cond, args...); err != nil {
+		return nil, 0, fmt.Errorf("count audit logs: %w", err)
+	}
+	limit := f.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	entries := []AuditEntry{}
+	err := s.db.Select(&entries, "SELECT * FROM AuditLogs WHERE "+cond+" ORDER BY Id DESC LIMIT ? OFFSET ?",
+		append(args, limit, f.Offset)...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query audit logs: %w", err)
+	}
+	return entries, total, nil
+}
+
+// CountSince counts entries of an action since the given time.
+func (s *AuditStore) CountSince(action string, since time.Time) (int, error) {
+	var n int
+	err := s.db.Get(&n, "SELECT COUNT(*) FROM AuditLogs WHERE Action = ? AND OccurredAt > ?", action, since.UTC().Format(time.RFC3339Nano))
+	return n, err
 }
 
 // Query returns audit log entries with optional filters.

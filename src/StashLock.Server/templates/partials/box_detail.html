@@ -1,50 +1,45 @@
-{{if .Metadata}}
-<div class="detail-section">
-    <h4>Metadata</h4>
-    <div class="detail-row"><span class="dl">Created</span><span>{{formatDate .Metadata.CreatedAt}}</span></div>
-    <div class="detail-row"><span class="dl">Updated</span><span>{{formatDate .Metadata.UpdatedAt}}</span></div>
-    <div class="detail-row"><span class="dl">Size</span><span>{{formatBytesInt .Metadata.SizeBytes}}</span></div>
-    <div class="detail-row">
-        <span class="dl">Deleted</span>
-        <span>
-            {{if .Metadata.IsDeleted}}<span class="badge badge-err">Yes</span>{{else}}<span class="badge badge-ok">No</span>{{end}}
-        </span>
-    </div>
-    {{if .Metadata.DeletedAt}}
-    <div class="detail-row"><span class="dl">Deleted At</span><span>{{formatDate .Metadata.DeletedAt}}</span></div>
+<div class="card-h"><h2 id="drawer-title" class="mono">{{.Key}}</h2><span class="spacer"></span><button class="icon-btn" type="button" data-close aria-label="Close details">✕</button></div>
+<div class="card-b" style="display:grid;gap:16px">
+    {{if .Metadata}}
+    <dl class="kv">
+        <dt>Box · Tag</dt><dd class="mono">{{.Box}} · {{.Tag}}</dd>
+        <dt>Version</dt><dd class="mono">{{.Version}}</dd>
+        <dt>Size</dt><dd>{{formatBytesInt .Metadata.SizeBytes}}</dd>
+        <dt>Created</dt><dd><time datetime="{{.Metadata.CreatedAt}}">{{.Metadata.CreatedAt}}</time></dd>
+        <dt>Updated</dt><dd><time datetime="{{.Metadata.UpdatedAt}}">{{.Metadata.UpdatedAt}}</time></dd>
+        <dt>Expires</dt><dd>{{if .Metadata.ExpiresAt}}<time datetime="{{.Metadata.ExpiresAt}}">{{.Metadata.ExpiresAt}}</time>{{if .Metadata.IsExpired}} <span class="pill bad">Expired</span>{{end}}{{else}}Never{{end}}</dd>
+        <dt>Status</dt><dd>{{if .Metadata.IsDeleted}}<span class="pill neutral">Deleted <time datetime="{{.Metadata.DeletedAt}}" data-relative>{{.Metadata.DeletedAt}}</time></span>{{else}}<span class="pill ok">Active</span>{{end}}</dd>
+    </dl>
     {{end}}
-    <div class="detail-row">
-        <span class="dl">Expires</span>
-        <span>{{if .Metadata.ExpiresAt}}{{formatDate .Metadata.ExpiresAt}}{{else}}-{{end}}</span>
-    </div>
-    <div class="detail-row">
-        <span class="dl">Expired</span>
-        <span>
-            {{if .Metadata.IsExpired}}<span class="badge badge-err">Yes</span>{{else}}<span class="badge badge-ok">No</span>{{end}}
-        </span>
-    </div>
-    <div class="detail-row"><span class="dl">Versions</span><span>{{.Metadata.VersionCount}}</span></div>
-</div>
-{{end}}
 
-<div class="detail-section">
-    <h4>Value</h4>
-    <button class="btn btn-sm" onclick="revealBoxValue('{{escapeJs .Key}}', this)">Reveal Value</button>
-    <div id="revealed-value" style="margin-top:8px;display:none"></div>
-</div>
+    <div class="field">
+        <span class="legend">Stored value (encrypted)</span>
+        <div id="cipher-box"><button class="btn ghost sm" type="button" hx-get="/admin/boxes/value?key={{.Key}}" hx-target="#cipher-box">Show encrypted value</button></div>
+        <span class="hint">Decrypt locally with <span class="mono">stashlock decode</span> and the tag's private key.</span>
+    </div>
 
-{{if .History}}{{if gt (len .History) 0}}
-<div class="detail-section">
-    <h4>History</h4>
-    <ul class="history-list">
-        {{range .History}}
-        <li>
-            <span>v{{.VersionNumber}} &middot; {{formatBytesInt .SizeBytes}} &middot; {{formatDate .SavedAt}}</span>
-            <span>
-                <button class="btn-ghost btn-sm" onclick="confirmRestoreVersion('{{escapeJs $.Key}}', {{.VersionNumber}})">Restore</button>
-            </span>
-        </li>
-        {{end}}
-    </ul>
+    <div class="field">
+        <span class="legend">History</span>
+        {{if .History}}
+        <div class="table-wrap"><table>
+            <thead><tr><th>#</th><th>Saved</th><th>Size</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+            {{range .History}}
+            <tr><td class="num">{{.VersionNumber}}</td><td><time datetime="{{.SavedAt}}" data-relative>{{.SavedAt}}</time></td><td class="num">{{formatBytesInt .SizeBytes}}</td>
+                <td><button class="btn ghost sm" type="button" hx-post="/admin/boxes/restore-version?key={{$.Key}}&ver={{.VersionNumber}}" hx-confirm="Make revision #{{.VersionNumber}} the current value of {{$.Key}}? The current value is kept in history." hx-target="#drawer">Restore</button></td></tr>
+            {{end}}
+            </tbody>
+        </table></div>
+        {{else}}<span class="hint">No earlier values. History grows each time this entry is published again.</span>{{end}}
+    </div>
+
+    {{if .Metadata}}{{if not .Metadata.IsDeleted}}
+    <div class="field" style="border-top:1px solid var(--border);padding-top:14px">
+        <span class="legend">Delete</span>
+        <span class="hint">Hides this entry from apps. You can restore it from “Show deleted”.</span>
+        <div><button class="btn danger sm" type="button" hx-get="/admin/boxes/confirm-delete?key={{.Key}}" hx-target="#dialog">Delete entry</button></div>
+    </div>
+    {{else}}
+    <div><button class="btn ghost sm" type="button" hx-post="/admin/boxes/restore?key={{.Key}}" hx-swap="none">Restore entry</button></div>
+    {{end}}{{end}}
 </div>
-{{end}}{{end}}

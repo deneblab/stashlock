@@ -128,7 +128,7 @@ func setupTestRouter(t *testing.T) (*testServer, *store.StorageService) {
 	apiKeyStore := store.NewApiKeyStore(db)
 	boxesHandler := NewBoxesHandler(storage, auditStore, "1.0.0-test")
 	decodeHandler := NewDecodeHandler(storage)
-	keysHandler := NewKeysHandler(apiKeyStore)
+	keysHandler := NewKeysHandler(apiKeyStore, auditStore)
 
 	r := chi.NewRouter()
 	r.Use(middleware.ApiKeyAuth(apiKeyStore))

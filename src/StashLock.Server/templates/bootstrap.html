@@ -1,14 +1,16 @@
 {{define "content"}}
-<div class="login-screen">
-    <div class="login-card">
-        <h1>Your admin key</h1>
-        <p>The master key has been used and is now blocked. From now on log in with this admin key.
-           Copy it now — it will not be shown again.</p>
-        <div class="key-value">
-            <span id="admin-key-value" class="mono">{{.AdminKey}}</span>
-            <button type="button" class="btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('admin-key-value').textContent).then(function(){showToast('Copied to clipboard');})">Copy</button>
+<div class="login">
+    <div class="card">
+        <a class="brand" href="/admin"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>StashLock</a>
+        <h1>Save your admin key</h1>
+        <div class="alert warn"><div class="grow"><strong>This is the only time the key is shown</strong>The master key you used is now blocked. Use this admin key to sign in from now on.</div></div>
+        <div class="field">
+            <span class="legend" id="admin-key-label">Admin key</span>
+            <div class="code" aria-labelledby="admin-key-label"><code id="admin-key-value">{{.AdminKey}}</code><button class="icon-btn" type="button" data-copy="#admin-key-value" aria-label="Copy admin key"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg></button></div>
+            <span class="hint">Store it in your password manager.</span>
         </div>
-        <a class="btn" href="/admin">I have saved it — continue</a>
+        <label class="check"><input type="checkbox" id="saved-chk" onchange="document.getElementById('continue-btn').toggleAttribute('aria-disabled',!this.checked);document.getElementById('continue-btn').classList.toggle('is-disabled',!this.checked)"><span>I have saved this key<small>Lost every admin key? Set a new STASHLOCK_MASTER_KEY and restart the server.</small></span></label>
+        <a class="btn is-disabled" id="continue-btn" href="/admin" aria-disabled="true" onclick="if(this.hasAttribute('aria-disabled')){event.preventDefault();showToast('Tick “I have saved this key” first');}">Continue to dashboard</a>
     </div>
 </div>
 {{end}}

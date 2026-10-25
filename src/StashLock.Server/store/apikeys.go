@@ -13,6 +13,7 @@ import (
 	"github.com/deneblab/stashlock-servergo/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
 )
 
 // ApiKeyStore handles API key CRUD operations.
@@ -39,6 +40,7 @@ type ApiKeyInfo struct {
 	ExpiresAt          *string `json:"expiresAt,omitempty"`
 	RateLimitPerMinute *int    `json:"rateLimitPerMinute,omitempty"`
 	CreatedAt          string  `json:"createdAt"`
+	LastUsedAt         *string `json:"lastUsedAt,omitempty"`
 }
 
 // CreateApiKeyRequest is the request body for creating a new API key.
@@ -122,6 +124,16 @@ func (s *ApiKeyStore) create(db execer, req CreateApiKeyRequest) (*CreateApiKeyR
 	} else if err := ValidateBoxTag(req.Box, req.Tag); err != nil {
 		return nil, err
 	}
+	if req.ExpiresAt != nil && strings.TrimSpace(*req.ExpiresAt) == "" {
+		req.ExpiresAt = nil
+	}
+	if req.ExpiresAt != nil {
+		exp, err := NormalizeExpiry(*req.ExpiresAt)
+		if err != nil {
+			return nil, err
+		}
+		req.ExpiresAt = &exp
+	}
 
 	plainKey, err := GenerateKey()
 	if err != nil {
@@ -179,10 +191,46 @@ func (s *ApiKeyStore) create(db execer, req CreateApiKeyRequest) (*CreateApiKeyR
 	return &CreateApiKeyResponse{Info: info, Key: plainKey}, nil
 }
 
+// NormalizeExpiry accepts RFC 3339 or a plain date (YYYY-MM-DD = end of that day, UTC)
+// and returns RFC 3339 UTC. Expiry dates in the past are rejected.
+func NormalizeExpiry(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	var t time.Time
+	var err error
+	if len(v) == len("2006-01-02") {
+		t, err = time.Parse("2006-01-02", v)
+		t = t.Add(24*time.Hour - time.Second)
+	} else {
+		t, err = time.Parse(time.RFC3339Nano, v)
+	}
+	if err != nil {
+		return "", models.NewStashLockError(models.ErrorCodes.MissingRequiredFields,
+			"expiresAt must be a date (YYYY-MM-DD) or an RFC 3339 timestamp", 400)
+	}
+	if t.Before(time.Now()) {
+		return "", models.NewStashLockError(models.ErrorCodes.MissingRequiredFields,
+			"expiresAt must be in the future", 400)
+	}
+	return t.UTC().Format(time.RFC3339), nil
+}
+
 // List returns API keys sorted by box, tag and name; empty box/tag means no filter.
 func (s *ApiKeyStore) List(box, tag string) ([]ApiKeyInfo, error) {
+	return s.list(box, tag, nil)
+}
+
+// ListByType returns only admin keys (admin=true) or only box.tag keys (admin=false).
+func (s *ApiKeyStore) ListByType(admin bool) ([]ApiKeyInfo, error) {
+	return s.list("", "", &admin)
+}
+
+func (s *ApiKeyStore) list(box, tag string, admin *bool) ([]ApiKeyInfo, error) {
 	query := "SELECT * FROM ApiKeys WHERE 1=1"
 	var args []interface{}
+	if admin != nil {
+		query += " AND IsAdmin = ?"
+		args = append(args, boolToInt(*admin))
+	}
 	if box != "" {
 		query += " AND Box = ?"
 		args = append(args, box)
@@ -269,13 +317,15 @@ func (s *ApiKeyStore) Validate(token string) (*models.ApiKeyIdentity, error) {
 		return nil, nil
 	}
 
-	// Check expiry
+	// Check expiry; an unparseable expiry counts as expired
 	if entity.ExpiresAt.Valid && entity.ExpiresAt.String != "" {
 		expiresAt, err := time.Parse(time.RFC3339Nano, entity.ExpiresAt.String)
-		if err == nil && expiresAt.Before(time.Now().UTC()) {
+		if err != nil || expiresAt.Before(time.Now().UTC()) {
 			return nil, nil
 		}
 	}
+
+	s.touchLastUsed(entity)
 
 	identity := &models.ApiKeyIdentity{
 		Id:        entity.Id,
@@ -294,6 +344,19 @@ func (s *ApiKeyStore) Validate(token string) (*models.ApiKeyIdentity, error) {
 	}
 
 	return identity, nil
+}
+
+// touchLastUsed records when a key was last used, at most once per minute per key.
+func (s *ApiKeyStore) touchLastUsed(entity models.ApiKeyEntity) {
+	now := time.Now().UTC()
+	if entity.LastUsedAt.Valid {
+		if last, err := time.Parse(time.RFC3339, entity.LastUsedAt.String); err == nil && now.Sub(last) < time.Minute {
+			return
+		}
+	}
+	if _, err := s.db.Exec("UPDATE ApiKeys SET LastUsedAt = ? WHERE Id = ?", now.Format(time.RFC3339), entity.Id); err != nil {
+		log.Warn().Err(err).Str("apiKeyId", entity.Id).Msg("Failed to update LastUsedAt")
+	}
 }
 
 // ensureNotLastAdmin refuses to disable the only remaining active admin key.
@@ -400,6 +463,9 @@ func entityToInfo(e models.ApiKeyEntity) ApiKeyInfo {
 		rl := int(e.RateLimitPerMinute.Int64)
 		info.RateLimitPerMinute = &rl
 	}
+	if e.LastUsedAt.Valid {
+		info.LastUsedAt = &e.LastUsedAt.String
+	}
 	return info
 }
 
@@ -415,4 +481,37 @@ func nullInt(n *int) interface{} {
 		return nil
 	}
 	return *n
+}
+
+// ExpiringSoon returns active keys that expire within the given window.
+func (s *ApiKeyStore) ExpiringSoon(within time.Duration) ([]ApiKeyInfo, error) {
+	now := time.Now().UTC()
+	var entities []models.ApiKeyEntity
+	err := s.db.Select(&entities,
+		"SELECT * FROM ApiKeys WHERE IsActive = 1 AND ExpiresAt IS NOT NULL AND ExpiresAt > ? AND ExpiresAt <= ? ORDER BY ExpiresAt",
+		now.Format(time.RFC3339), now.Add(within).Format(time.RFC3339))
+	if err != nil {
+		return nil, fmt.Errorf("expiring keys: %w", err)
+	}
+	return toInfos(entities), nil
+}
+
+// NeverUsed returns active box.tag keys created more than a day ago that were never used.
+func (s *ApiKeyStore) NeverUsed() ([]ApiKeyInfo, error) {
+	var entities []models.ApiKeyEntity
+	err := s.db.Select(&entities,
+		"SELECT * FROM ApiKeys WHERE IsActive = 1 AND IsAdmin = 0 AND LastUsedAt IS NULL AND CreatedAt < ? ORDER BY CreatedAt",
+		time.Now().UTC().Add(-24*time.Hour).Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, fmt.Errorf("unused keys: %w", err)
+	}
+	return toInfos(entities), nil
+}
+
+func toInfos(entities []models.ApiKeyEntity) []ApiKeyInfo {
+	result := make([]ApiKeyInfo, 0, len(entities))
+	for _, e := range entities {
+		result = append(result, entityToInfo(e))
+	}
+	return result
 }

@@ -89,7 +89,7 @@ func main() {
 	// Create handlers
 	boxesHandler := handlers.NewBoxesHandler(storage, auditStore, cfg.Version)
 	healthHandler := handlers.NewHealthHandler(db)
-	keysHandler := handlers.NewKeysHandler(apiKeyStore)
+	keysHandler := handlers.NewKeysHandler(apiKeyStore, auditStore)
 	decodeHandler := handlers.NewDecodeHandler(storage)
 	auditHandler := handlers.NewAuditHandler(auditStore)
 	statsHandler := handlers.NewStatsHandler(db, cfg.Version)
@@ -168,7 +168,7 @@ func main() {
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(handlers.StaticFS())))
 
 	// Admin dashboard
-	dashboard := handlers.NewDashboardHandler(db, storage, apiKeyStore, auditStore, cfg.MasterKey, cfg.Version)
+	dashboard := handlers.NewDashboardHandler(storage, apiKeyStore, auditStore, cfg.MasterKey, cfg.Version, cfg.DefaultRateLimitPerMin)
 	r.Route("/admin", dashboard.Routes)
 
 	// Start server

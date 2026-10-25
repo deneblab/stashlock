@@ -1,0 +1,8 @@
+<div class="alert info" role="status">
+    <div class="grow">
+        <strong>{{if .Info.IsAdmin}}Admin key “{{.Info.Name}}” created{{else}}API key “{{.Info.Name}}” created for {{.Info.Box}}.{{.Info.Tag}}{{end}}</strong>
+        <span>Copy it now. It will not be shown again.</span>
+        <div class="code"><code id="new-key">{{if .Info.IsAdmin}}{{.Key}}{{else}}STASHLOCK_API_KEY={{.Key}}{{end}}</code><button class="icon-btn" type="button" data-copy="#new-key" aria-label="Copy key"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg></button></div>
+    </div>
+    <button class="icon-btn" type="button" aria-label="Dismiss" onclick="this.closest('#key-created').textContent=''">✕</button>
+</div>

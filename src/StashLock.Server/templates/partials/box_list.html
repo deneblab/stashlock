@@ -1,37 +1,39 @@
-{{if not .}}
-<p class="empty-state">No boxes found.</p>
-{{else if eq (len .) 0}}
-<p class="empty-state">No boxes found.</p>
+{{if not .Groups}}
+<div class="empty">
+    {{if .Filtered}}
+    <h3>No boxes match these filters</h3>
+    <p>Change the box, tag or search text, or tick “Show deleted”.</p>
+    {{else}}
+    <h3>No boxes yet</h3>
+    <p>Secrets are encrypted on your machine and published with the CLI, using an API key with Write access for that box.tag.</p>
+    <div class="code"><code id="publish-cmd">stashlock publish ./vault/stashlock.enc.develop.secrets.json --api-key slk_…</code><button class="icon-btn" type="button" data-copy="#publish-cmd" aria-label="Copy command"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg></button></div>
+    <a class="btn ghost sm" href="/admin/keys">Create an API key</a>
+    {{end}}
+</div>
 {{else}}
+<div class="table-wrap">
 <table>
-    <thead>
-        <tr>
-            <th>Box</th>
-            <th>Tag</th>
-            <th>Version</th>
-            <th>Size</th>
-            <th>Created</th>
-            <th>Updated</th>
-            <th>Expires</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
+    <thead><tr><th>Entry</th><th>Size</th><th>Updated</th><th>Expires</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>
-        {{range .}}
-        <tr>
-            <td class="mono">{{.Box}}</td>
-            <td class="mono">{{.Tag}}</td>
-            <td class="mono">{{.Version}}</td>
-            <td>{{formatBytesInt .SizeBytes}}</td>
-            <td>{{formatDate .CreatedAt}}</td>
-            <td>{{formatDate .UpdatedAt}}</td>
-            <td>{{if .ExpiresAt}}{{formatDate .ExpiresAt}}{{else}}-{{end}}</td>
-            <td>
-                <button class="btn-ghost btn-sm" onclick="openBoxDetail('{{escapeJs .Key}}')">Details</button>
-                <button class="btn-danger btn-sm" onclick="confirmDeleteBox('{{escapeJs .Key}}')">Delete</button>
-            </td>
+    {{range .Groups}}
+        <tr class="group"><td colspan="6"><span class="mono">{{.BoxTag}}</span> · {{len .Entries}} entr{{if eq (len .Entries) 1}}y{{else}}ies{{end}} · <a href="/admin/keys">API keys</a></td></tr>
+        {{range .Entries}}
+        <tr class="{{if .IsDeleted}}deleted{{end}}">
+            <td><button class="rowlink mono" type="button" hx-get="/admin/boxes/detail?key={{.Key}}" hx-target="#drawer">{{.Key}}</button></td>
+            <td class="num">{{formatBytesInt .SizeBytes}}</td>
+            <td><time datetime="{{.UpdatedAt}}" data-relative>{{.UpdatedAt}}</time></td>
+            <td>{{if .ExpiresAt}}<span class="pill warn"><time datetime="{{.ExpiresAt}}" data-relative>{{.ExpiresAt}}</time></span>{{else}}<span class="muted">—</span>{{end}}</td>
+            <td>{{if .IsDeleted}}<span class="pill neutral">Deleted</span>{{else}}<span class="pill ok">Active</span>{{end}}</td>
+            <td>{{if .IsDeleted}}<button class="btn ghost sm" type="button" hx-post="/admin/boxes/restore?key={{.Key}}" hx-swap="none">Restore</button>{{else}}<button class="btn ghost sm" type="button" hx-get="/admin/boxes/detail?key={{.Key}}" hx-target="#drawer">Details</button>{{end}}</td>
         </tr>
         {{end}}
+    {{end}}
     </tbody>
 </table>
+</div>
+<div class="pager">
+    <span class="num">{{add .Offset 1}}–{{.End}} of {{.Total}}</span>
+    <button class="btn ghost sm" type="button" {{if not .HasPrev}}disabled{{end}} hx-get="/admin/boxes/list?offset={{.PrevOffset}}" hx-include="#box-filters" hx-target="#box-list">Previous</button>
+    <button class="btn ghost sm" type="button" {{if not .HasNext}}disabled{{end}} hx-get="/admin/boxes/list?offset={{.NextOffset}}" hx-include="#box-filters" hx-target="#box-list">Next</button>
+</div>
 {{end}}

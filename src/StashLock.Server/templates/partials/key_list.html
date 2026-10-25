@@ -1,43 +1,58 @@
-{{if not .}}
-<p class="empty-state">No API keys found.</p>
-{{else if eq (len .) 0}}
-<p class="empty-state">No API keys found.</p>
-{{else}}
+{{if .Admin}}
+<div class="table-wrap">
 <table>
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>Prefix</th>
-            <th>Access</th>
-            <th>R</th>
-            <th>W</th>
-            <th>D</th>
-            <th>Active</th>
-            <th>Rate Limit</th>
-            <th>Created</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
+    <thead><tr><th>Name</th><th>Prefix</th><th>Created</th><th>Last used</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>
-        {{range .}}
-        <tr>
-            <td>{{.Name}}</td>
-            <td class="mono">{{.KeyPrefix}}...</td>
-            <td class="mono">{{if .IsAdmin}}<span class="badge badge-ok">Admin</span>{{else}}{{.Box}}.{{.Tag}}{{end}}</td>
-            <td>{{if .CanRead}}<span class="badge badge-ok">R</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>
-            <td>{{if .CanWrite}}<span class="badge badge-ok">W</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>
-            <td>{{if .CanDelete}}<span class="badge badge-ok">D</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>
-            <td>{{if .IsActive}}<span class="badge badge-ok">Active</span>{{else}}<span class="badge badge-err">Revoked</span>{{end}}</td>
-            <td>{{if .RateLimitPerMinute}}{{derefInt .RateLimitPerMinute}}/min{{else}}Default{{end}}</td>
-            <td>{{formatDate .CreatedAt}}</td>
-            <td>
-                {{if .IsActive}}
-                <button class="btn-danger btn-sm" onclick="confirmRevokeKey('{{escapeJs .Id}}', '{{escapeJs .Name}}')">Revoke</button>
-                {{end}}
-                <button class="btn-danger btn-sm" onclick="confirmDeleteKey('{{escapeJs .Id}}', '{{escapeJs .Name}}')">Delete</button>
-            </td>
-        </tr>
-        {{end}}
+    {{range .Keys}}
+    <tr>
+        <td>{{.Name}}{{if eq .Id $.CurrentAdminId}} <span class="pill accent">You</span>{{end}}</td>
+        <td class="mono">{{.KeyPrefix}}…</td>
+        <td><time datetime="{{.CreatedAt}}">{{.CreatedAt}}</time></td>
+        <td>{{if .LastUsedAt}}<time datetime="{{derefStr .LastUsedAt}}" data-relative>{{derefStr .LastUsedAt}}</time>{{else}}<span class="muted">Never</span>{{end}}</td>
+        <td>{{keyStatus .}}</td>
+        <td class="actions">
+            {{if .IsActive}}{{if gt $.ActiveAdmins 1}}<button class="btn ghost sm" type="button" hx-get="/admin/keys/confirm?op=revoke&id={{.Id}}" hx-target="#dialog">Revoke</button>{{else}}<button class="btn ghost sm" type="button" disabled aria-describedby="last-admin">Revoke</button> <span id="last-admin" class="hint">Last admin key. Create another first.</span>{{end}}
+            {{else}}<button class="btn ghost sm" type="button" hx-get="/admin/keys/confirm?op=delete&id={{.Id}}" hx-target="#dialog">Delete</button>{{end}}
+        </td>
+    </tr>
+    {{end}}
     </tbody>
 </table>
+</div>
+{{else if not .Keys}}
+<div class="empty">
+    <h3>No API keys yet</h3>
+    <p>Create one per box.tag: Read + Write for CI that runs <span class="mono">stashlock publish</span>, Read only for apps.</p>
+    <button class="btn" type="button" hx-get="/admin/keys/new" hx-target="#dialog">Create API key</button>
+</div>
+{{else}}
+<div class="table-wrap desktop-only">
+<table>
+    <thead><tr><th>Name</th><th>Box.Tag</th><th>Access</th><th>Expires</th><th>Last used</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+    {{range .Keys}}
+    <tr>
+        <td>{{.Name}}<br><span class="mono muted">{{.KeyPrefix}}…</span></td>
+        <td class="mono">{{.Box}}.{{.Tag}}</td>
+        <td>{{accessPills .}}</td>
+        <td>{{if .ExpiresAt}}<time datetime="{{derefStr .ExpiresAt}}">{{derefStr .ExpiresAt}}</time>{{else}}<span class="muted">Never</span>{{end}}</td>
+        <td>{{if .LastUsedAt}}<time datetime="{{derefStr .LastUsedAt}}" data-relative>{{derefStr .LastUsedAt}}</time>{{else}}<span class="muted">Never</span>{{end}}</td>
+        <td>{{keyStatus .}}</td>
+        <td class="actions">{{if .IsActive}}<button class="btn ghost sm" type="button" hx-get="/admin/keys/confirm?op=revoke&id={{.Id}}" hx-target="#dialog">Revoke</button>{{else}}<button class="btn ghost sm" type="button" hx-get="/admin/keys/confirm?op=delete&id={{.Id}}" hx-target="#dialog">Delete</button>{{end}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+</table>
+</div>
+<div class="cards mobile-only">
+    {{range .Keys}}
+    <div class="kcard">
+        <div class="row"><b>{{.Name}}</b>{{keyStatus .}}</div>
+        <div class="mono">{{.Box}}.{{.Tag}}</div>
+        {{accessPills .}}
+        <div class="row hint"><span>Expires {{if .ExpiresAt}}<time datetime="{{derefStr .ExpiresAt}}">{{derefStr .ExpiresAt}}</time>{{else}}never{{end}}</span><span>Used {{if .LastUsedAt}}<time datetime="{{derefStr .LastUsedAt}}" data-relative>{{derefStr .LastUsedAt}}</time>{{else}}never{{end}}</span></div>
+        <div class="actions">{{if .IsActive}}<button class="btn ghost sm" type="button" hx-get="/admin/keys/confirm?op=revoke&id={{.Id}}" hx-target="#dialog">Revoke</button>{{else}}<button class="btn ghost sm" type="button" hx-get="/admin/keys/confirm?op=delete&id={{.Id}}" hx-target="#dialog">Delete</button>{{end}}</div>
+    </div>
+    {{end}}
+</div>
 {{end}}

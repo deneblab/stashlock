@@ -40,7 +40,8 @@ var migrations = []string{
 		IsActive           INTEGER NOT NULL DEFAULT 1,
 		ExpiresAt          TEXT,
 		RateLimitPerMinute INTEGER,
-		CreatedAt          TEXT NOT NULL
+		CreatedAt          TEXT NOT NULL,
+		LastUsedAt         TEXT
 	)`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS IX_ApiKeys_KeyHash
 		ON ApiKeys (KeyHash)`,

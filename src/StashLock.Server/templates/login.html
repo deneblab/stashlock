@@ -1,15 +1,16 @@
 {{define "content"}}
-<div class="login-screen">
-    <div class="login-card">
-        <h1>StashLock</h1>
-        <p>Enter your admin key. First login: use the one-time master key (STASHLOCK_MASTER_KEY).</p>
-        <form method="post" action="/admin/login">
-            <input type="password" name="apiKey" placeholder="Admin key" autocomplete="off" autofocus>
-            <button type="submit" class="btn">Unlock</button>
-        </form>
-        {{if .ErrorMessage}}
-        <div class="login-error">{{.ErrorMessage}}</div>
-        {{end}}
-    </div>
+<div class="login">
+    <form class="card" method="post" action="/admin/login">
+        <a class="brand" href="/admin"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>StashLock</a>
+        <h1>Sign in to the admin dashboard</h1>
+        {{if .Notice}}<div class="alert info" role="status"><div class="grow">{{.Notice}}</div></div>{{end}}
+        {{if .ErrorMessage}}<div class="alert bad" role="alert"><div class="grow">{{.ErrorMessage}}</div></div>{{end}}
+        <div class="field">
+            <label for="login-key">Admin key</label>
+            <input class="input mono" id="login-key" name="apiKey" type="password" autocomplete="off" placeholder="slk_adm_…" autofocus required {{if .ErrorMessage}}aria-invalid="true"{{end}}>
+            <span class="hint">First sign-in on a new server: paste the one-time master key from <span class="mono">STASHLOCK_MASTER_KEY</span>. You will get your admin key on the next screen.</span>
+        </div>
+        <button class="btn" type="submit">Sign in</button>
+    </form>
 </div>
 {{end}}

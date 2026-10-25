@@ -284,11 +284,12 @@ Errors return:
 A built-in web dashboard is available at `/admin` for managing the vault through a browser.
 
 **Features:**
-- Overview with key counts, storage usage, and health status
-- Browse, search, and delete secrets (secrets are published encrypted with `stashlock publish`)
-- View key metadata and version history
-- Manage API keys per `box.tag` (create, revoke, delete)
-- Query audit logs with filtering
+- **Overview** — box, storage and key counts, live server health, "Needs attention" (keys expiring within 7 days, never-used keys, failed sign-ins) and recent activity
+- **Boxes** — entries grouped by `box.tag`, filters, pagination, "Show deleted" with restore; details show metadata, the encrypted value (never plaintext) and history with restore of earlier revisions. Secrets themselves are published encrypted with `stashlock publish`
+- **Keys** — API keys per `box.tag` (access, expiry, last used, status) and admin keys; create, revoke, delete. The last active admin key cannot be removed
+- **Audit** — every read, write, sign-in and key change, filtered by action, box key, key and date range
+
+Light and dark themes follow the system setting; the layout works down to phone width.
 
 Login with an admin key at `/admin` (first time: the one-time master key). The session is an HttpOnly cookie valid for 8 hours and ends when its admin key is revoked.
 

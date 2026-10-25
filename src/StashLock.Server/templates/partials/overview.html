@@ -1,0 +1,34 @@
+<div style="display:grid;gap:16px">
+<div class="stats">
+    <div class="card stat"><div class="k">Boxes</div><div class="v">{{.Stats.BoxTags}}</div><div class="s">box.tag groups</div></div>
+    <div class="card stat"><div class="k">Stored entries</div><div class="v">{{.Stats.Entries}}</div><div class="s">{{if .Stats.DeletedEntries}}{{.Stats.DeletedEntries}} deleted, restorable{{else}}box.tag.version{{end}}</div></div>
+    <div class="card stat"><div class="k">Storage</div><div class="v">{{formatBytes .Stats.SizeBytes}}</div><div class="s">of ciphertext</div></div>
+    <div class="card stat"><div class="k">API keys</div><div class="v">{{.Stats.ApiKeysActive}} active</div><div class="s">{{.Stats.ApiKeysOther}} expired or revoked</div></div>
+    <div class="card stat"><div class="k">Admin keys</div><div class="v">{{.Stats.AdminKeys}}</div><div class="s">active</div></div>
+    <div class="card stat"><div class="k">Audit events</div><div class="v">{{.Stats.AuditLast24h}}</div><div class="s">in the last 24 h</div></div>
+</div>
+<div class="two">
+    <section class="card" aria-labelledby="att-h">
+        <div class="card-h"><h2 id="att-h">Needs attention</h2>{{if .AttentionCount}}<span class="pill warn">{{.AttentionCount}}</span>{{end}}</div>
+        {{if .AttentionCount}}
+        <ul class="list">
+            {{range .Expiring}}<li><span class="pill warn">Expires <time datetime="{{derefStr .ExpiresAt}}" data-relative>{{derefStr .ExpiresAt}}</time></span><span>{{if .IsAdmin}}Admin key{{else}}API key{{end}} <b>{{.Name}}</b>{{if not .IsAdmin}} · <span class="mono">{{.Box}}.{{.Tag}}</span>{{end}}</span><a class="btn ghost sm" style="margin-left:auto" href="/admin/keys{{if .IsAdmin}}?type=admin{{end}}">Review</a></li>{{end}}
+            {{range .NeverUsed}}<li><span class="pill neutral">Never used</span><span>API key <b>{{.Name}}</b> · created <time datetime="{{.CreatedAt}}" data-relative>{{.CreatedAt}}</time></span><a class="btn ghost sm" style="margin-left:auto" href="/admin/keys">Review</a></li>{{end}}
+            {{if .FailedLogins}}<li><span class="pill bad">Failed sign-ins</span><span>{{.FailedLogins}} failed admin sign-in{{if gt .FailedLogins 1}}s{{end}} in the last 24 h</span><a class="btn ghost sm" style="margin-left:auto" href="/admin/audit?action=login.failed">Open audit</a></li>{{end}}
+        </ul>
+        {{else}}
+        <div class="card-b muted">Nothing needs attention. Keys expiring within 7 days, unused keys and failed sign-ins show up here.</div>
+        {{end}}
+    </section>
+    <section class="card" aria-labelledby="act-h">
+        <div class="card-h"><h2 id="act-h">Recent activity</h2><span class="spacer"></span><a class="btn ghost sm" href="/admin/audit">Open audit</a></div>
+        {{if .Recent}}
+        <ul class="list">
+            {{range .Recent}}<li><span class="pill {{outcomeClass .Outcome}}">{{.Action}}</span><span class="mono">{{if .BoxKey}}{{.BoxKey}}{{else}}{{.ApiKeyName}}{{end}}</span><time class="when" datetime="{{.OccurredAt}}" data-relative>{{.OccurredAt}}</time></li>{{end}}
+        </ul>
+        {{else}}
+        <div class="card-b muted">No activity yet.</div>
+        {{end}}
+    </section>
+</div>
+</div>

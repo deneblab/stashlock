@@ -1,36 +1,19 @@
 {{define "content"}}
-<div class="toolbar">
-    <input type="text" id="audit-box-filter" name="boxKey" placeholder="Box key filter..."
-           hx-get="/admin/audit?handler=Query"
-           hx-trigger="keyup changed delay:300ms"
-           hx-target="#audit-list"
-           hx-swap="innerHTML"
-           hx-include="#audit-action-filter, #audit-limit">
-    <select id="audit-action-filter" name="action"
-            hx-get="/admin/audit?handler=Query"
-            hx-trigger="change"
-            hx-target="#audit-list"
-            hx-swap="innerHTML"
-            hx-include="#audit-box-filter, #audit-limit">
-        <option value="">All actions</option>
-        <option value="get">get</option>
-        <option value="set">set</option>
-        <option value="delete">delete</option>
-    </select>
-    <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px">
-        Limit <input type="number" id="audit-limit" name="limit" value="100" style="width:70px" min="1" max="1000">
-    </label>
-    <button class="btn btn-sm"
-            hx-get="/admin/audit?handler=Query"
-            hx-target="#audit-list"
-            hx-swap="innerHTML"
-            hx-include="#audit-box-filter, #audit-action-filter, #audit-limit">Refresh</button>
-</div>
-
-<div id="audit-list"
-     hx-get="/admin/audit?handler=Query"
-     hx-trigger="load"
-     hx-swap="innerHTML">
-    <div class="spinner"></div>
-</div>
+<div class="page-head"><h1>Audit log</h1><p>Every read, write and admin action, newest first. Times are shown in your local time zone; hover for UTC.</p></div>
+<section class="card">
+    <form class="toolbar" id="audit-filters" hx-get="/admin/audit/list" hx-target="#audit-list" hx-trigger="change, input changed delay:300ms" onsubmit="return false">
+        <div class="field"><label for="a-act">Action</label>
+            <select class="input" id="a-act" name="action">
+                <option value="">All actions</option>
+                {{range .Data.ActionGroups}}<optgroup label="{{.Label}}">{{range .Actions}}<option {{if eq . $.Data.Action}}selected{{end}}>{{.}}</option>{{end}}</optgroup>{{end}}
+            </select></div>
+        <div class="field"><label for="a-bt">Box key</label><input class="input mono" id="a-bt" name="box" placeholder="exampleapp.develop" autocomplete="off"></div>
+        <div class="field"><label for="a-key">Key</label><input class="input" id="a-key" name="key" placeholder="Name or id" autocomplete="off"></div>
+        <div class="field"><label for="a-from">From (UTC)</label><input class="input" type="date" id="a-from" name="from"></div>
+        <div class="field"><label for="a-to">To (UTC)</label><input class="input" type="date" id="a-to" name="to"></div>
+    </form>
+    <div id="audit-list" hx-get="/admin/audit/list" hx-trigger="load" hx-include="#audit-filters">
+        <div class="card-b"><div class="skeleton" style="width:60%"></div></div>
+    </div>
+</section>
 {{end}}

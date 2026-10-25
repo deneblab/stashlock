@@ -13,10 +13,20 @@ import (
 
 type KeysHandler struct {
 	apiKeyStore *store.ApiKeyStore
+	auditStore  *store.AuditStore
 }
 
-func NewKeysHandler(apiKeyStore *store.ApiKeyStore) *KeysHandler {
-	return &KeysHandler{apiKeyStore: apiKeyStore}
+func NewKeysHandler(apiKeyStore *store.ApiKeyStore, auditStore *store.AuditStore) *KeysHandler {
+	return &KeysHandler{apiKeyStore: apiKeyStore, auditStore: auditStore}
+}
+
+func (h *KeysHandler) audit(r *http.Request, action, detail string) {
+	identity := middleware.GetIdentity(r)
+	var id, name string
+	if identity != nil {
+		id, name = identity.Id, identity.Name
+	}
+	h.auditStore.Log(action, "", id, name, r.Header.Get("X-Correlation-Id"), "ok", detail)
 }
 
 // requireMaster checks that the current identity is a master key.
@@ -48,6 +58,7 @@ func (h *KeysHandler) CreateKey(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteStashLockError(w, r, err)
 		return
 	}
+	h.audit(r, "key.create", keyDetail(resp.Info))
 
 	writeJSON(w, http.StatusCreated, resp)
 }
@@ -101,6 +112,7 @@ func (h *KeysHandler) RevokeKey(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteStashLockError(w, r, err)
 		return
 	}
+	h.audit(r, "key.revoke", "key id "+id)
 
 	writeJSON(w, http.StatusOK, models.ApiResult{Status: "ok", Message: "API key revoked"})
 }
@@ -116,6 +128,7 @@ func (h *KeysHandler) DeleteKey(w http.ResponseWriter, r *http.Request) {
 		middleware.WriteStashLockError(w, r, err)
 		return
 	}
+	h.audit(r, "key.delete", "key id "+id)
 
 	writeJSON(w, http.StatusOK, models.ApiResult{Status: "ok", Message: "API key permanently deleted"})
 }

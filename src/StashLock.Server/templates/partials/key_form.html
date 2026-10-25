@@ -1,0 +1,32 @@
+<form hx-post="/admin/keys/create" hx-target="#key-created" autocomplete="off">
+    <div class="card-h"><h2 id="dialog-title">{{if .Admin}}Create admin key{{else}}Create API key{{end}}</h2></div>
+    <div class="card-b">
+        {{if .Admin}}
+        <input type="hidden" name="isAdmin" value="true">
+        <p class="hint" style="margin:0">Admin keys manage API keys, the audit log and this dashboard. They cannot read or write secrets.</p>
+        <div class="field"><label for="ck-name">Name</label><input class="input" id="ck-name" name="name" required placeholder="second-admin"><span class="hint">Who will use it.</span></div>
+        {{else}}
+        <div class="field"><label for="ck-name">Name</label><input class="input" id="ck-name" name="name" required placeholder="exampleapp-ci"><span class="hint">The service or pipeline that uses it.</span></div>
+        <div class="grid-2">
+            <div class="field"><label for="ck-box">Box</label><input class="input mono" id="ck-box" name="box" list="dl-box" required pattern="[A-Za-z0-9_\-]{1,64}" placeholder="exampleapp"><datalist id="dl-box">{{range .Boxes}}<option value="{{.}}"></option>{{end}}</datalist></div>
+            <div class="field"><label for="ck-tag">Tag</label><input class="input mono" id="ck-tag" name="tag" list="dl-tag" required pattern="[A-Za-z0-9_\-]{1,64}" placeholder="develop"><datalist id="dl-tag">{{range .Tags}}<option value="{{.}}"></option>{{end}}</datalist></div>
+        </div>
+        <span class="hint">Letters, digits, “-” and “_”. The key works on every version of box.tag (00001, 00002 …).</span>
+        <fieldset>
+            <legend class="legend">Access</legend>
+            <label class="check"><input type="checkbox" name="canRead" value="true" checked><span>Read<small>Apps fetching secrets</small></span></label>
+            <label class="check"><input type="checkbox" name="canWrite" value="true"><span>Write<small>CI running stashlock publish</small></span></label>
+            <label class="check"><input type="checkbox" name="canDelete" value="true"><span>Delete</span></label>
+        </fieldset>
+        <div class="grid-2">
+            <div class="field"><label for="ck-exp">Expires</label><input class="input" type="date" id="ck-exp" name="expiresAt" min="{{.Tomorrow}}"><span class="hint">Leave empty for no expiry. Valid until the end of that day (UTC).</span></div>
+            <div class="field"><label for="ck-rl">Rate limit</label><input class="input" type="number" id="ck-rl" name="rateLimitPerMinute" min="1" placeholder="{{.DefaultRateLimit}} (default)"><span class="hint">Requests per minute.</span></div>
+        </div>
+        {{end}}
+        <div class="dialog-error"></div>
+    </div>
+    <div class="dialog-f">
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button class="btn" type="submit">Create key</button>
+    </div>
+</form>

@@ -1,8 +1,10 @@
 {{define "content"}}
-<div id="stat-grid" class="stat-grid"
-     hx-get="/admin/index?handler=Stats"
-     hx-trigger="load, every 30s"
-     hx-swap="innerHTML">
-    <div class="spinner"></div>
+<div class="page-head"><h1>Overview</h1></div>
+<div id="overview" hx-get="/admin/overview" hx-trigger="load, every 30s" hx-swap="innerHTML">
+    <div class="stats">
+        <div class="card stat"><div class="skeleton" style="width:50%"></div><div class="skeleton" style="width:30%;height:22px;margin-top:8px"></div></div>
+        <div class="card stat"><div class="skeleton" style="width:50%"></div><div class="skeleton" style="width:30%;height:22px;margin-top:8px"></div></div>
+        <div class="card stat"><div class="skeleton" style="width:50%"></div><div class="skeleton" style="width:30%;height:22px;margin-top:8px"></div></div>
+    </div>
 </div>
 {{end}}

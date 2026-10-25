@@ -27,6 +27,8 @@ type KeyEntry struct {
 	UpdatedAt string `json:"updatedAt"`
 	SizeBytes int    `json:"sizeBytes"`
 	ExpiresAt string `json:"expiresAt,omitempty"`
+	IsDeleted bool   `json:"isDeleted,omitempty"`
+	DeletedAt string `json:"deletedAt,omitempty"`
 }
 
 // KeyMetadata holds metadata about a stored key.
