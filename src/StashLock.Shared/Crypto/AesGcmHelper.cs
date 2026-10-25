@@ -69,7 +69,7 @@ internal static class AesGcmHelper
         return Encoding.UTF8.GetString(plaintext);
     }
 
-    // Associated data is authenticated but not encrypted (v2 binds each value to its key path)
+    // Associated data is authenticated but not encrypted (the file format binds each value to its key path)
     private static byte[]? Aad(string? associatedData) =>
         associatedData == null ? null : Encoding.UTF8.GetBytes(associatedData);
 
@@ -92,7 +92,7 @@ internal static class AesGcmHelper
     }
 
     /// <summary>
-    ///     SOPS v2 MAC: HMAC-SHA256 over a length-prefixed encoding of the format label, the vault key
+    ///     File MAC: HMAC-SHA256 over a length-prefixed encoding of the format label, the vault key
     ///     and every (key, encrypted value) pair in ordinal order, so field boundaries are unambiguous.
     /// </summary>
     public static byte[] ComputeMac(byte[] macKey, string vaultKey, SortedDictionary<string, string> encryptedValues)
@@ -107,7 +107,7 @@ internal static class AesGcmHelper
             hmac.TransformBlock(bytes, 0, bytes.Length, null, 0);
         }
 
-        Field("stashlock-sops-v2");
+        Field("stashlock-sops");
         Field(vaultKey);
         foreach (var kvp in encryptedValues)
         {

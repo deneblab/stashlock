@@ -9,14 +9,14 @@ using Deneblab.StashLock.Shared.Crypto;
 namespace Deneblab.StashLock.Shared.Formats;
 
 /// <summary>
-///     The stashlock.enc.*.json format ("mode": "sops-v2"): every value is encrypted separately under a random
+///     The stashlock.enc.*.json format ("mode": "sops"): every value is encrypted separately under a random
 ///     data key that is sealed with ECIES for the tag's public key. HKDF derives separate encryption and MAC keys
 ///     from the data key; each value is bound to its key path (AES-GCM associated data); a length-prefixed HMAC
 ///     covers all values and the vault key.
 /// </summary>
 internal static class SopsCodec
 {
-    public const string Mode = "sops-v2";
+    public const string Mode = "sops";
 
     public static SopsEncryptedFile Encrypt(IReadOnlyDictionary<string, string> secrets, byte[] recipientPublicKey, string vaultKey)
     {
@@ -101,6 +101,6 @@ internal static class SopsCodec
     }
 
     private static (byte[] EncKey, byte[] MacKey) DeriveKeys(byte[] dataKey) => (
-        HKDF.DeriveKey(HashAlgorithmName.SHA256, dataKey, 32, salt: Array.Empty<byte>(), info: Encoding.UTF8.GetBytes("stashlock-sops-v2-enc")),
-        HKDF.DeriveKey(HashAlgorithmName.SHA256, dataKey, 32, salt: Array.Empty<byte>(), info: Encoding.UTF8.GetBytes("stashlock-sops-v2-mac")));
+        HKDF.DeriveKey(HashAlgorithmName.SHA256, dataKey, 32, salt: Array.Empty<byte>(), info: Encoding.UTF8.GetBytes("stashlock-sops-enc")),
+        HKDF.DeriveKey(HashAlgorithmName.SHA256, dataKey, 32, salt: Array.Empty<byte>(), info: Encoding.UTF8.GetBytes("stashlock-sops-mac")));
 }

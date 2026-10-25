@@ -33,7 +33,7 @@ Generates X25519 key pairs (`stashlock.key.{tag}.json`) for each tag defined in 
 stashlock encode ./my-vault/secrets.json
 ```
 
-Reads a plaintext JSON secrets file and writes one encrypted file per tag (`stashlock.enc.{tag}.secrets.json`). Every value is encrypted separately and the file carries a MAC (`"mode": "sops-v2"`, see [Encryption Details](#encryption-details)). Key names stay readable, so diffs show which secrets changed.
+Reads a plaintext JSON secrets file and writes one encrypted file per tag (`stashlock.enc.{tag}.secrets.json`). Every value is encrypted separately and the file carries a MAC (`"mode": "sops"`, see [Encryption Details](#encryption-details)). Key names stay readable, so diffs show which secrets changed.
 
 ### 4. Decrypt secrets
 
@@ -145,7 +145,7 @@ config     keypairs    encrypted   uploaded      plaintext
 - **Auth Tag:** 16 bytes
 - **Output format:** ephemeral public key (32B) || nonce (12B) || ciphertext || tag (16B)
 
-Encrypted file (`"mode": "sops-v2"`):
+Encrypted file (`"mode": "sops"`):
 - a random 32-byte data key, sealed with ECIES for the tag's public key (`_stashlock.dataKey`);
 - HKDF-SHA256 derives separate encryption and MAC keys from it;
 - each value is AES-256-GCM encrypted with its key path (e.g. `Db:Password`) as authenticated data, so a value cannot be moved to another key;

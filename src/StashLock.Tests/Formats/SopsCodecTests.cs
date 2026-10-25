@@ -12,7 +12,7 @@ using Xunit;
 
 namespace Deneblab.StashLock.Tests.Formats;
 
-public class SopsV2Tests
+public class SopsCodecTests
 {
     private static readonly Dictionary<string, string> Secrets = new()
     {
@@ -30,13 +30,13 @@ public class SopsV2Tests
     {
         var (pub, priv) = Keys();
         var file = SopsCodec.Encrypt(Secrets, pub, "app.dev.00001");
-        Assert.Equal("sops-v2", file.Metadata.Mode);
+        Assert.Equal("sops", file.Metadata.Mode);
         var result = SopsDecryptor.DecryptAutoDetect(Json(file), priv, "app.dev.00001");
         Assert.Equal(Secrets.OrderBy(k => k.Key), result.OrderBy(k => k.Key));
     }
 
     [Fact]
-    public void V2_ValueMovedToAnotherKey_IsRejected()
+    public void ValueMovedToAnotherKey_IsRejected()
     {
         var (pub, priv) = Keys();
         var file = SopsCodec.Encrypt(Secrets, pub, "app.dev.00001");
@@ -45,7 +45,7 @@ public class SopsV2Tests
     }
 
     [Fact]
-    public void V2_RemovedOrAddedKey_FailsMac()
+    public void RemovedOrAddedKey_FailsMac()
     {
         var (pub, priv) = Keys();
         var removed = SopsCodec.Encrypt(Secrets, pub, "app.dev.00001");
@@ -58,7 +58,7 @@ public class SopsV2Tests
     }
 
     [Fact]
-    public void V2_VaultKeyIsBound()
+    public void VaultKeyIsBound()
     {
         var (pub, priv) = Keys();
 
@@ -76,13 +76,13 @@ public class SopsV2Tests
     {
         var (pub, priv) = Keys();
         var file = SopsCodec.Encrypt(Secrets, pub, "app.dev.00001");
-        file.Metadata.Mode = "sops";
+        file.Metadata.Mode = "sops-v2";
         Assert.Contains("Unsupported", Assert.Throws<CryptographicException>(() => SopsCodec.Decrypt(file, priv)).Message);
         Assert.Throws<DecryptionException>(() => SopsDecryptor.DecryptAutoDetect("{\"VaultKey\":\"a.b.c\",\"EncryptedData\":\"AAAA\"}", priv));
     }
 
     [Fact]
-    public void V2_WrongPrivateKey_IsReported()
+    public void WrongPrivateKey_IsReported()
     {
         var (pub, _) = Keys();
         var (_, otherPriv) = Keys();
@@ -91,7 +91,7 @@ public class SopsV2Tests
     }
 }
 
-public class CacheV2Tests : IDisposable
+public class CacheFormatTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("stashlock-cache2-").FullName;
     private readonly byte[] _key = SecretsCacheManager.DeriveCacheKey(new byte[32], "test-machine");
