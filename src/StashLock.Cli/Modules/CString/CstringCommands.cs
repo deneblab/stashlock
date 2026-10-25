@@ -144,9 +144,7 @@ internal class CstringCommands
         // 6. Output
         if (env)
         {
-            var isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
-            var prefix = isWindows ? "set" : "export";
-            Console.WriteLine($"{prefix} STASHLOCK_CONNECTION_STRING=\"{plainCs}\"");
+            Console.WriteLine(EnvAssignment(plainCs));
             return Task.FromResult(ExitCodes.Ok);
         }
 
@@ -181,9 +179,7 @@ internal class CstringCommands
         Console.Write("  Environment variable (copy-paste): ");
         Console.ResetColor();
         Console.WriteLine();
-        var isWin = Environment.OSVersion.Platform == PlatformID.Win32NT;
-        var setCmd = isWin ? "set" : "export";
-        Console.WriteLine($"    {setCmd} STASHLOCK_CONNECTION_STRING=\"{plainCs}\"");
+        Console.WriteLine($"    {EnvAssignment(plainCs)}");
         Console.WriteLine();
 
         // Try clipboard
@@ -268,34 +264,47 @@ internal class CstringCommands
         return null;
     }
 
+    // cmd.exe: set "NAME=value" keeps quotes out of the value; POSIX shells: export NAME="value"
+    private static string EnvAssignment(string value) =>
+        OperatingSystem.IsWindows()
+            ? $"set \"STASHLOCK_CONNECTION_STRING={value}\""
+            : $"export STASHLOCK_CONNECTION_STRING=\"{value}\"";
+
+    // The secret goes through stdin, never on a command line other processes can read
     private static void TryCopyToClipboard(string text)
     {
-        try
+        var tools = OperatingSystem.IsWindows() ? new[] { ("clip", "") }
+            : OperatingSystem.IsMacOS() ? new[] { ("pbcopy", "") }
+            : new[] { ("wl-copy", ""), ("xclip", "-selection clipboard"), ("xsel", "--clipboard --input") };
+
+        foreach (var (file, args) in tools)
         {
-            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            try
             {
-                var process = new System.Diagnostics.Process
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    StartInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "cmd.exe",
-                        Arguments = $"/c echo {text}| clip",
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true
-                    }
-                };
-                process.Start();
-                process.WaitForExit(2000);
+                    FileName = file,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                });
+                if (process == null) continue;
+                process.StandardInput.Write(text);
+                process.StandardInput.Close();
+                if (!process.WaitForExit(2000) || process.ExitCode != 0) continue;
 
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("  Copied plain connection string to clipboard!");
+                Console.Error.WriteLine("  Copied plain connection string to clipboard.");
                 Console.ResetColor();
+                return;
             }
-        }
-        catch
-        {
-            // Clipboard copy is best-effort
+            catch
+            {
+                // Tool not installed: try the next one (clipboard copy is best-effort)
+            }
         }
     }
 

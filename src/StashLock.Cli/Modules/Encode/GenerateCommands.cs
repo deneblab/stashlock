@@ -115,7 +115,7 @@ internal class GenerateCommands
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.Error.WriteLine($"Error: No key files (stashlock.key.*.json) found in {secretsDir}");
-            Console.Error.WriteLine("Run 'stashlock key' to generate key files.");
+            Console.Error.WriteLine("Run 'stashlock keygen <vault dir>' to generate key files.");
             Console.ResetColor();
             return Task.FromResult(ExitCodes.Error);
         }
@@ -169,7 +169,7 @@ internal class GenerateCommands
         }
 
         Console.WriteLine();
-        Console.WriteLine($"Generate complete: {generated} encrypted file(s) created (mode: {mode}).");
+        Console.WriteLine($"Encode complete: {generated} encrypted file(s) created (mode: {mode}).");
         return Task.FromResult(ExitCodes.Ok);
     }
 

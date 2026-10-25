@@ -29,16 +29,19 @@ internal class InitCommands
     ///   stashlock init ./my-vault
     ///   stashlock init ./my-vault --tags production,develop
     ///   stashlock init ./my-vault --tags production --url https://vault.example.com
+    ///   stashlock init ./secrets --name exampleapp --tags develop,production
     /// </summary>
     /// <param name="dir">Directory path to initialize as a StashLock vault</param>
     /// <param name="tags">-t, Comma-separated list of environment tags (e.g., production,develop)</param>
     /// <param name="url">Server URL to store in config for publish command</param>
+    /// <param name="name">Vault (box) name; defaults to the target directory's name</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
     public Task<int> Root(
         [Argument] string dir,
         string tags = "",
         string url = "",
+        string name = "",
         CancellationToken cancellationToken = default)
     {
         var targetDir = Path.IsPathFullyQualified(dir)
@@ -58,8 +61,7 @@ internal class InitCommands
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.Error.WriteLine($"Warning: stashlock.config.json already exists at {configPath}");
-            Console.Error.WriteLine($"Skipping — to reinitialize, delete the file first:");
-            Console.Error.WriteLine($"  del \"{configPath}\"");
+            Console.Error.WriteLine("Nothing changed. To start over, delete that file and run init again.");
             Console.ResetColor();
             _log.LogWarning("Config already exists at {Path}, skipping", configPath);
             return Task.FromResult(ExitCodes.Error);
@@ -76,10 +78,17 @@ internal class InitCommands
             }
         }
 
-        var dirName = new DirectoryInfo(Directory.GetCurrentDirectory()).Name;
-        var derivedName = new string(dirName.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        // Box name: --name, else the vault directory's own name (letters and digits, lower case)
+        var source = string.IsNullOrWhiteSpace(name) ? new DirectoryInfo(targetDir).Name : name;
+        var derivedName = new string(source.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_').ToArray()).ToLowerInvariant();
         if (string.IsNullOrEmpty(derivedName))
             derivedName = "vault";
+        if (!string.IsNullOrWhiteSpace(name) && derivedName != name)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.Error.WriteLine($"Note: name \"{name}\" stored as \"{derivedName}\" (letters, digits, '-' and '_' only).");
+            Console.ResetColor();
+        }
 
         var config = new StashlockConfig
         {

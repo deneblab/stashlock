@@ -69,7 +69,7 @@ internal class KeyCommands
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.Error.WriteLine("No tags defined in stashlock.config.json.");
-            Console.Error.WriteLine("Run 'stashlock init /path -tags production,develop' to define tags.");
+            Console.Error.WriteLine("Run 'stashlock init <dir> --tags production,develop' to define tags.");
             Console.ResetColor();
             _log.LogWarning("No tags defined in config at {Path}", configPath);
             return Task.FromResult(ExitCodes.Error);

@@ -406,6 +406,9 @@ public static class SimpleEnv
     // Git root detection (supports worktrees: .git can be a file)
     // ----------------------
 
+    /// <summary>Repository root (directory containing .git), or null outside a checkout.</summary>
+    internal static string? GitRoot() => FindGitRoot();
+
     private static string? FindGitRoot()
     {
         var candidates = new[]

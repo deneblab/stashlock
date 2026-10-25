@@ -103,50 +103,5 @@ internal class StashLockConfigurationProvider : ConfigurationProvider
         }
     }
 
-    private static Dictionary<string, string> DeserializePlainJson(string json)
-    {
-        var options = new JsonSerializerOptions
-        {
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
-        };
-
-        using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
-        {
-            CommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
-        });
-
-        var result = new Dictionary<string, string>();
-        FlattenElement(doc.RootElement, "", result);
-        return result;
-    }
-
-    private static void FlattenElement(JsonElement element, string prefix, Dictionary<string, string> result)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.Object:
-                foreach (var prop in element.EnumerateObject())
-                {
-                    var key = string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix}:{prop.Name}";
-                    FlattenElement(prop.Value, key, result);
-                }
-                break;
-
-            case JsonValueKind.Array:
-                var index = 0;
-                foreach (var item in element.EnumerateArray())
-                {
-                    var key = $"{prefix}:{index}";
-                    FlattenElement(item, key, result);
-                    index++;
-                }
-                break;
-
-            default:
-                result[prefix] = element.ToString();
-                break;
-        }
-    }
+    private static Dictionary<string, string> DeserializePlainJson(string json) => SecretsJson.Parse(json);
 }

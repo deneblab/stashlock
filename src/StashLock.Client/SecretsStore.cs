@@ -245,34 +245,44 @@ internal class SecretsStore : ISecretsStore
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>ISecretsStore instance or null if not found</returns>
-    internal static async Task<ISecretsStore> TryOpenDevFileAsync(CancellationToken cancellationToken = default)
+    internal static Task<ISecretsStore> TryOpenDevFileAsync(CancellationToken cancellationToken = default)
     {
         var simpleEnv = SimpleEnv.Detect();
-
         if (simpleEnv.AppMode != SimpleAppMode.Dev && simpleEnv.AppMode != SimpleAppMode.Test)
-            return null;
+            return Task.FromResult<ISecretsStore>(null);
+        return TryOpenDevFileAsync(DevFileCandidates(SimpleEnv.GitRoot(), simpleEnv.AppRoot), cancellationToken);
+    }
 
-        if (string.IsNullOrEmpty(simpleEnv.AppRoot))
-            return null;
-
-        var devDir = Path.Combine(simpleEnv.AppRoot, "dev");
-
-        var secretsDir = Path.Combine(devDir, "secrets");
-        if (!Directory.Exists(secretsDir))
-            return null;
-
-        var secretsFile = Path.Combine(secretsDir, "secrets.json");
-        if (!File.Exists(secretsFile))
-            return null;
-
-        try
+    /// <summary>
+    ///     Where <c>FromDevFile()</c> looks, in order: <c>&lt;repo root&gt;/dev/secrets/secrets.json</c>,
+    ///     then the older <c>&lt;repo root&gt;/dev/app.vs/dev/secrets/secrets.json</c>.
+    /// </summary>
+    internal static string[] DevFileCandidates(string gitRoot, string appRoot)
+    {
+        var list = new List<string>();
+        if (!string.IsNullOrEmpty(gitRoot))
+            list.Add(Path.Combine(gitRoot, "dev", "secrets", "secrets.json"));
+        if (!string.IsNullOrEmpty(appRoot))
         {
-            return await OpenFileAsync(secretsFile, cancellationToken);
+            var legacy = Path.Combine(appRoot, "dev", "secrets", "secrets.json");
+            if (!list.Contains(legacy))
+                list.Add(legacy);
         }
-        catch
+        return list.ToArray();
+    }
+
+    /// <summary>
+    ///     Opens the first existing candidate. Returns null when none exists; a file that exists but
+    ///     cannot be parsed throws, naming the file.
+    /// </summary>
+    internal static async Task<ISecretsStore> TryOpenDevFileAsync(string[] candidates, CancellationToken cancellationToken)
+    {
+        foreach (var path in candidates)
         {
-            return null;
+            if (File.Exists(path))
+                return await OpenFileAsync(path, cancellationToken);
         }
+        return null;
     }
 
     #region Sealed Box Factory Methods
@@ -644,20 +654,7 @@ internal class SecretsStore : ISecretsStore
 
     #endregion
 
-    private static Dictionary<string, string> DeserializeSecretsJson(string json)
-    {
-        var options = new JsonSerializerOptions
-        {
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true,
-            Converters = { new SecretsFlattenedJsonConverter() }
-        };
-
-        var model = JsonSerializer.Deserialize<SecretsModel>(json, options);
-        if (model == null || model.Values == null) throw new StashLockException("Failed to deserialize secrets JSON");
-
-        return model.Values.ToDictionary(x => x.Key, y => y.Value?.ToString() ?? string.Empty);
-    }
+    private static Dictionary<string, string> DeserializeSecretsJson(string json) => SecretsJson.Parse(json);
 
     #endregion
 }

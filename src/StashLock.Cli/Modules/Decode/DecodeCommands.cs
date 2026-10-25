@@ -41,8 +41,8 @@ internal class DecodeCommands
     ///
     /// Examples:
     ///   stashlock decode ./my-vault/stashlock.enc.production.secrets.json
-    ///   stashlock decode ./my-vault/stashlock.enc.production.secrets.json -key ./keys/stashlock.key.production.json
-    ///   stashlock decode ./my-vault/stashlock.enc.production.secrets.json -output ./decrypted.json
+    ///   stashlock decode ./my-vault/stashlock.enc.production.secrets.json --key ./keys/stashlock.key.production.json
+    ///   stashlock decode ./my-vault/stashlock.enc.production.secrets.json --output ./decrypted.json
     /// </summary>
     /// <param name="file">Path to the encrypted stashlock.enc.*.json file</param>
     /// <param name="key">-key, Optional path to the key file (auto-detected from tag if omitted)</param>
@@ -279,8 +279,8 @@ internal class DecodeCommands
         {
             PrintError($"Error: Key file not found: {keyFilePath}");
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Error.WriteLine("Hint: Use -key to specify the key file path, e.g.:");
-            Console.Error.WriteLine("  stashlock decode <file> -key path/to/stashlock.key.<tag>.json");
+            Console.Error.WriteLine("Hint: Use --key to specify the key file path, e.g.:");
+            Console.Error.WriteLine("  stashlock decode <file> --key path/to/stashlock.key.<tag>.json");
             Console.ResetColor();
             return null;
         }

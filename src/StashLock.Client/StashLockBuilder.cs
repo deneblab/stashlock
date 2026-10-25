@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Deneblab.StashLock.Client.Common.Exceptions;
+using Deneblab.StashLock.Client.Common.Simple;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -273,7 +274,12 @@ public class StashLockBuilder
                     {
                         var store = await SecretsStore.TryOpenDevFileAsync(token);
                         if (store == null)
-                            throw new StashLockException("No dev secrets file found. Provide an explicit file path via FromDevFile(path).");
+                        {
+                            var looked = SecretsStore.DevFileCandidates(SimpleEnv.GitRoot(), SimpleEnv.Detect().AppRoot);
+                            throw new StashLockException(looked.Length == 0
+                                ? "No dev secrets file found: not inside a git checkout in Dev/Test mode. Pass a path: FromDevFile(path)."
+                                : $"No dev secrets file found. Looked in: {string.Join(", ", looked)}. Create one there or pass a path: FromDevFile(path).");
+                        }
                         result = store;
                     }
                     else

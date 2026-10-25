@@ -15,153 +15,48 @@ A secure, lightweight key-value storage system (secrets vault) with a REST API, 
 
 ## Features
 
-- **Secure Storage** — URL-safe base64 encoded keys, X25519 ECIES sealed-box encryption
-- **REST API** — 17 endpoints for full secrets lifecycle management
-- **Authentication** — Bearer token auth: admin master keys, and API keys bound to one `box.tag`
-- **RBAC** — Per-key read/write/delete permissions with box-level access control
-- **Rate Limiting** — Configurable per-API-key request throttling
-- **Versioning** — Automatic secret version history with rollback
-- **TTL / Expiration** — Optional time-to-live with automatic cleanup
-- **Soft Delete** — Safe deletion with retention, preventing accidental data loss
-- **Audit Logging** — Full audit trail of all operations
-- **Admin Dashboard** — Built-in web UI for managing keys, API keys, and viewing audit logs
-- **SQLite Backend** — Reliable, file-based database storage
-- **Docker Support** — Containerized deployment with docker-compose
-- **CLI Tool** — Command-line interface for encrypting and managing secrets
-- **Client Library** — Zero-dependency async-first .NET library
+- **End-to-end encryption** — secrets are encrypted with X25519 ECIES (AES-256-GCM) by the CLI and decrypted by the client library; the server stores only ciphertext
+- **REST API** — store, read, list, delete and version secrets addressed as `box.tag.version`
+- **Access control** — one-time master key → admin keys; API keys bound to one `box.tag` with read/write/delete permissions, expiry and rate limits
+- **Versioning** — history of earlier values with restore
+- **TTL and soft delete** — optional expiry; deleted entries stay restorable for a retention period
+- **Audit log** — reads, writes, sign-ins and key changes
+- **Admin dashboard** — built-in web UI at `/admin`
+- **SQLite** — single-file database with versioned migrations
+- **Docker** — small image, compose examples including Traefik
+- **CLI and .NET client** — `stashlock` global tool and `Deneblab.StashLock.Client` (depends on `Microsoft.Extensions.*` and BouncyCastle)
+
+## Getting Started
+
+| You want to… | Read |
+|--------------|------|
+| Go from zero to a working secret (server, vault, publish, read in an app) | [GETTING_STARTED.md](GETTING_STARTED.md) |
+| Deploy the server (compose, Traefik, upgrades, backup) | [docs/docker-compose.md](docs/docker-compose.md) |
+| Use the CLI | [src/StashLock.Cli/README.md](src/StashLock.Cli/README.md) |
+| Read secrets from .NET | [src/StashLock.Client/README.md](src/StashLock.Client/README.md) |
+| Call the REST API | [API Documentation](#api-documentation) below |
 
 ## Components
 
-### StashLock.Server
-Web API server (Go) for hosting the secrets vault service. It stores only ciphertext: secrets are encrypted and decrypted by the CLI and the client library, never on the server.
+| Component | What it is | Install |
+|-----------|------------|---------|
+| `StashLock.Server` | Go web server: REST API, admin dashboard, SQLite | `ghcr.io/deneblab/stashlock-server` |
+| `StashLock.Cli` | Creates vaults and keys, encrypts, decrypts and publishes (needs .NET 8+) | `dotnet tool install -g Deneblab.StashLock.Cli` |
+| `StashLock.Client` | .NET library that fetches and decrypts secrets, with cache and `IConfiguration` support (net8.0) | `dotnet add package Deneblab.StashLock.Client` |
 
-### StashLock.Cli
-Command-line interface tool for encrypting and managing secrets. Available as a global .NET tool.
+## Quick API check
 
-**Install:**
-```bash
-dotnet tool install -g Deneblab.StashLock.Cli
-```
-
-**Usage:**
-```bash
-stashlock init ./my-vault -tags production,develop
-stashlock keygen ./my-vault
-stashlock encode ./my-vault/secrets.json
-stashlock decode ./my-vault/stashlock.enc.production.secrets.json
-stashlock publish ./my-vault/stashlock.enc.production.secrets.json --url http://localhost:8099 --api-key slk_...
-stashlock cstring ./my-vault --tag production          # generate connection string
-stashlock cstring ./my-vault --tag production --base64 # base64 output only
-```
-
-[CLI Documentation](src/StashLock.Cli/README.md)
-
-### StashLock.Client
-Client library for programmatic access to secrets. Available on NuGet.
-
-**Install:**
-```bash
-dotnet add package Deneblab.StashLock.Client
-```
-
-**Usage:**
-```csharp
-// Connection string (plain or base64)
-var store = await StashLock.CreateClient()
-    .WithConnectionString("Url=https://vault.example.com;ApiKey=slk_xxx;PrivateKey=base64key;Box=myapp;Tag=prod")
-    .OpenAsync();
-
-// Or via STASHLOCK_CONNECTION_STRING env var (auto-detected)
-var store = await StashLock.CreateClient()
-    .WithBox("myapp", "prod")
-    .OpenAsync();
-
-var secret = store["Database:Password"];
-```
-
-[Client Documentation](src/StashLock.Client/README.md)
-
-## Installation
-
-### Prerequisites
-
-- [Go 1.25+](https://go.dev/dl/) (for building the server from source)
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (for CLI and Client library)
-- [Docker](https://www.docker.com/get-started) (for containerized deployment)
-
-### Using Docker (Recommended)
-
-1. Create a `docker-compose.yml`:
-```yaml
-services:
-  stashlock-server:
-    image: ghcr.io/deneblab/stashlock-server:latest
-    container_name: stashlock-server
-    ports:
-      - "8099:8080"
-    environment:
-      - STASHLOCK_MASTER_KEY=${STASHLOCK_MASTER_KEY}   # one-time key for the first /admin login (>= 32 chars)
-    volumes:
-      - ./app/work:/app/work
-      - ./app/log:/app/log
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-```
-
-2. Start the server:
-```bash
-docker-compose up -d
-```
-
-The server will be available at `http://localhost:8099`
-
-### Building from Source
-
-1. Clone the repository
-2. Build the server (Go):
-```bash
-cd src/StashLock.Server
-go build -o stashlock-server .
-./stashlock-server
-```
-
-3. Build CLI and Client (.NET):
-```bash
-cd src
-dotnet build StashLock.sln
-```
-
-## Quick Start
-
-### Storing Content
+Keys in the URL are `box.tag.version`, base64url-encoded (no padding):
 
 ```bash
-# Store content with a key (with authentication)
-curl -X POST http://localhost:8080/boxes/YOUR_KEY_HERE \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: text/plain" \
-  -d "Your content here"
+KEY=$(printf 'exampleapp.develop.00001' | base64 | tr '+/' '-_' | tr -d '=')
+
+curl http://localhost:8099/healthz                                   # no auth
+curl -H "Authorization: Bearer $STASHLOCK_API_KEY" \
+     http://localhost:8099/boxes/$KEY                                # read (API key for exampleapp.develop)
 ```
 
-### Retrieving Content
-
-```bash
-# Retrieve content by key
-curl http://localhost:8080/boxes/YOUR_KEY_HERE \
-  -H "Authorization: Bearer YOUR_API_KEY"
-```
-
-### Health Check
-
-```bash
-# Check if server is running (no auth required)
-curl http://localhost:8080/
-```
+Values are ciphertext produced by `stashlock encode`; publish them with `stashlock publish` rather than raw `curl`.
 
 ## Authentication
 
@@ -325,101 +220,48 @@ Application logs are written using zerolog with:
 
 ## Docker Deployment
 
-Ready-to-use compose examples (minimal, Tailscale-only dashboard, behind Traefik), image tags and backup notes: [docs/docker-compose.md](docs/docker-compose.md).
+Compose examples (minimal, Tailscale-only dashboard, behind Traefik), image tags, upgrades, shutdown and backup: [docs/docker-compose.md](docs/docker-compose.md). All settings are listed under [Configuration](#configuration).
 
-### Using docker-compose
-
-The provided `docker-compose.yml` pulls the image from GitHub Container Registry and includes:
-- Automatic container restart
-- Bind-mount volumes for data and logs
-- Health checks via `/healthz`
-- Port mapping (8099:8080)
-
-```bash
-# Start the service
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop the service
-docker-compose down
-```
-
-### Data Persistence
-
-Data is stored in bind-mounted directories:
-- `./app/work` — SQLite database and working files
-- `./app/log` — Application logs
-
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `STASHLOCK_PORT` | Server listen port (default: 8080) |
-| `STASHLOCK_WORK_DIR` | Working directory for data (default: `./work`) |
-| `STASHLOCK_MASTER_KEY` | One-time master key (≥ 32 chars) for the first `/admin` login |
-| `STASHLOCK_DEFAULT_RATE_LIMIT` | Rate limit for API keys (per minute) |
-| `STASHLOCK_MAX_REQUEST_BODY_KB` | Largest accepted request body in KB (default 110) |
-| `STASHLOCK_DELETED_RETENTION_DAYS` | Days deleted entries stay restorable (default 30, `0` = forever) |
-| `STASHLOCK_ALLOWED_ORIGINS` | Comma-separated CORS origins (empty = CORS disabled) |
-| `STASHLOCK_ADMIN_NETWORKS` | CIDR whitelist for `/admin` |
-| `STASHLOCK_TRUSTED_PROXIES` | CIDRs of trusted reverse proxies (for `X-Forwarded-For`) |
-| `STASHLOCK_LOG_DIR` | Log file directory (default: `./logs`) |
-| `STASHLOCK_LOG_LEVEL` | Log level: debug, info, warn, error |
-
-### Building the Docker Image
+To build the image yourself:
 
 ```bash
 cd src/StashLock.Server
-docker build -t stashlock-server:latest .
-```
-
-### Running with Docker
-
-```bash
-docker run -d \
-  -p 8099:8080 \
-  -e STASHLOCK_MASTER_KEY="$(openssl rand -base64 32)" \
-  -v ./app/work:/app/work \
-  -v ./app/log:/app/log \
-  --name stashlock-server \
-  ghcr.io/deneblab/stashlock-server:latest
+docker build -t stashlock-server:local .
 ```
 
 ## Development
 
-### Local Development with .NET Aspire
+### Prerequisites
 
-The project includes an Aspire AppHost for local development orchestration (CLI + Client testing):
+- [Go](https://go.dev/dl/) matching `src/StashLock.Server/go.mod` (server)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (tests, build tooling; `global.json` pins it). The CLI and client themselves target .NET 8.
+
+### Building
 
 ```bash
-dotnet run --project src/AppHost
+cd src/StashLock.Server && go build -o stashlock-server .     # server
+dotnet build src/StashLock.Cli && dotnet build src/StashLock.Client
 ```
 
-This will start the Aspire dashboard for monitoring and orchestration.
+### .NET Aspire
+
+`src/StashLock.AspireApp/StashLock.AspireApp.AppHost` exists but does not start the Go server yet, so it is not useful for local runs today (tracked in SL-065). Run the server binary or Docker directly.
 
 ### Project Structure
 
 ```
 StashLock/
 ├── src/
-│   ├── StashLock.Server/      # Web API server (Go)
-│   ├── StashLock.Cli/         # Command-line tool
-│   ├── StashLock.Client/      # Client library (.NET 8.0)
-│   ├── StashLock.Tests/       # xUnit integration & unit tests
-│   ├── AppHost/                # .NET Aspire orchestration
+│   ├── StashLock.Server/      # Go server (API, dashboard, SQLite)
+│   ├── StashLock.Cli/         # stashlock CLI (.NET tool, net8.0)
+│   ├── StashLock.Client/      # Client library (net8.0)
+│   ├── StashLock.Tests/       # xUnit tests, incl. contract tests against the Go server
+│   ├── StashLock.AspireApp/   # .NET Aspire AppHost (not wired to the Go server yet)
 │   └── build/                 # Nuke build automation
-├── docker-compose.yml         # Docker Compose configuration
-└── README.md
-```
-
-### Building the Solution
-
-```bash
-cd src
-dotnet restore
-dotnet build
+├── docs/                      # Deployment guide (docker-compose.md)
+├── docker-compose.yml         # Minimal compose file
+├── GETTING_STARTED.md         # Step-by-step walkthrough
+└── global.json                # .NET SDK version for contributors
 ```
 
 ### Running Tests
@@ -481,7 +323,7 @@ Images and packages are tagged with:
 | **413 Payload Too Large** | Request body bigger than `maxRequestBodySizeKB` | Publish a smaller file or raise `STASHLOCK_MAX_REQUEST_BODY_KB` (and `STASHLOCK_MAX_VALUE_SIZE_KB`). |
 | **429 Too Many Requests** | The key's rate limit was exceeded, or 10 failed authentications came from your address within 5 minutes (blocked for 15 minutes) | Wait for the `Retry-After` header value (seconds). For rate limits, raise the key's limit in the dashboard; for blocks, fix the key that keeps failing. |
 | **Decryption failed** | Wrong private key, corrupted data, or mode mismatch | Verify the private key matches the public key used for encryption. Confirm encryption mode (SOPS vs whole-file) is consistent. |
-| **No key files found** (CLI) | Missing `stashlock.key.*.json` in vault directory | Run `stashlock keygen` to generate key files, or use `stashlock init` with `-tags` to create both config and keys. |
+| **No key files found** (CLI) | Missing `stashlock.key.*.json` in vault directory | Run `stashlock keygen <dir>` to generate key files, or `stashlock init <dir> --tags production,develop` to create both config and keys. |
 | **Config not found** (CLI) | Missing `stashlock.config.json` | Run `stashlock init <dir>` to create the vault configuration. |
 
 ### Checking Server Health

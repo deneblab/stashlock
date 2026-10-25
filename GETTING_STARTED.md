@@ -4,7 +4,7 @@ This guide walks you through the most common StashLock workflows — from deploy
 
 ## Prerequisites
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download) or later
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download) or later (for the CLI and your application)
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose (for server deployment)
 
 ---
@@ -78,28 +78,32 @@ dotnet tool install -g Deneblab.StashLock.Cli
 ### 2. Initialize a vault directory
 
 ```bash
-stashlock init ./my-vault -tags production,develop
+stashlock init ./my-vault --name myapp --tags production,develop --url http://localhost:8099
 ```
 
 This creates:
-- `stashlock.config.json` — vault configuration
+- `stashlock.config.json` — vault configuration (name, tags, server URL; safe to commit)
 - `stashlock.key.production.json` — X25519 key pair for the `production` tag
 - `stashlock.key.develop.json` — X25519 key pair for the `develop` tag
+- `.gitignore` entry `stashlock.key.*.json`, so key files are not committed
 
-### 3. Set the vault name
+Without `--name` the vault is named after its directory (`my-vault` → `my-vault`).
 
-Open `my-vault/stashlock.config.json` and set the `Name` field:
+### 3. Check the vault name
+
+`my-vault/stashlock.config.json` now contains:
 
 ```json
 {
   "Version": "00001",
   "Name": "myapp",
   "Tags": ["production", "develop"],
-  "EncryptionMode": "sops"
+  "EncryptionMode": "sops",
+  "ServerUrl": "http://localhost:8099"
 }
 ```
 
-The `Name` becomes part of the vault key: `myapp.production.00001`.
+The `Name` and a tag form the `box.tag` an API key is created for, and the vault key: `myapp.production.00001`.
 
 ### 4. Create a plaintext secrets file
 
@@ -180,11 +184,10 @@ stashlock decode ./my-vault/stashlock.enc.production.secrets.json
 | `stashlock.enc.*.json` (encrypted) | Yes — safe to commit |
 | `stashlock.key.*.json` (key pairs) | **No** — share securely, never commit |
 
-Add to your `.gitignore`:
+`stashlock init` already added `stashlock.key.*.json` to `.gitignore`. Add the plaintext file yourself:
 
 ```
 secrets.json
-stashlock.key.*.json
 ```
 
 ---
@@ -228,7 +231,7 @@ var dbConfig = store.GetSection<Dictionary<string, string>>("Database");
 ### Option B: IConfiguration integration
 
 ```csharp
-using Deneblab.StashLock.Client;
+using Deneblab.StashLock.Client.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -245,6 +248,7 @@ var connString = app.Configuration["Database:ConnectionString"];
 
 ```csharp
 using Deneblab.StashLock.Client;
+using Deneblab.StashLock.Client.Common.Exceptions;
 
 try
 {
@@ -260,6 +264,10 @@ catch (VaultConfigurationException ex)
 catch (VaultNotFoundException ex)
 {
     // Key not found on the server
+}
+catch (VaultAccessDeniedException ex)
+{
+    // 401: API key wrong, revoked or expired; 403: key not valid for myapp.production
 }
 catch (DecryptionException ex)
 {
@@ -277,7 +285,7 @@ var store = await StashLock.CreateClient()
     .OpenAsync();
 ```
 
-This auto-discovers `dev/secrets/secrets.json` relative to the project root when running in Dev or Test mode.
+In Dev or Test mode this finds `dev/secrets/secrets.json` in the root of your git repository (plain or nested JSON, e.g. `{"Database": {"Password": "dev"}}`). Outside a git checkout, pass the path: `FromDevFile("path/to/secrets.json")`.
 
 ---
 
@@ -340,7 +348,7 @@ Update the values in your local `secrets.json`:
 
 ```bash
 stashlock encode ./my-vault/secrets.json
-stashlock publish ./my-vault
+STASHLOCK_API_KEY=slk_... stashlock publish ./my-vault/stashlock.enc.production.secrets.json
 ```
 
 This overwrites the previous encrypted values on the server. The server automatically saves the old value to version history.
@@ -353,24 +361,16 @@ Applications fetch secrets when they call `OpenAsync()` — typically at startup
 
 ### Rolling back
 
-If you need to revert to a previous version, use the dashboard:
-1. Go to **Boxes** tab
-2. Click **Details** on the key
-3. Find the version in **History** and click **Restore**
+To revert to an earlier value, use the dashboard:
+1. Open the **Boxes** tab
+2. Click the entry (e.g. `myapp.production.00001`)
+3. In **History**, click **Restore** on the revision you want; the current value is kept in history
 
-Or via the API:
+To inspect history through the API (keys in the URL are base64url-encoded):
 ```bash
-# Get version history
-curl -H "Authorization: Bearer YOUR_KEY" http://localhost:8099/boxes/KEY/history
-
-# Get a specific version's value
-curl -H "Authorization: Bearer YOUR_KEY" http://localhost:8099/boxes/KEY/history/1
-
-# Restore by re-publishing the old value
-curl -X POST http://localhost:8099/boxes/KEY \
-  -H "Authorization: Bearer YOUR_KEY" \
-  -H "Content-Type: text/plain" \
-  -d "old-value-here"
+KEY=$(printf 'myapp.production.00001' | base64 | tr '+/' '-_' | tr -d '=')
+curl -H "Authorization: Bearer $STASHLOCK_API_KEY" http://localhost:8099/boxes/$KEY/history
+curl -H "Authorization: Bearer $STASHLOCK_API_KEY" http://localhost:8099/boxes/$KEY/history/1   # encrypted value of revision 1
 ```
 
 ---
@@ -379,11 +379,10 @@ curl -X POST http://localhost:8099/boxes/KEY \
 
 ```
 # Full workflow
-stashlock init ./vault -tags production,develop    # 1. Create vault + keys
-# Edit stashlock.config.json to set Name
+stashlock init ./vault --name myapp --tags production,develop --url http://localhost:8099   # 1. Vault + keys
 # Create secrets.json with your secrets
-stashlock encode ./vault/secrets.json              # 2. Encrypt
-stashlock publish ./vault                          # 3. Upload to server
+stashlock encode ./vault/secrets.json                                      # 2. Encrypt
+STASHLOCK_API_KEY=slk_... stashlock publish ./vault/stashlock.enc.production.secrets.json   # 3. Upload (key for myapp.production)
 
 # In your app
 dotnet add package Deneblab.StashLock.Client       # 4. Install client

@@ -36,6 +36,18 @@ public static class StashLockConfigurationExtensions
         return builder;
     }
 
+    // FromDevFile() without a path: same discovery as OpenAsync
+    private static string FindDevFile()
+    {
+        var looked = SecretsStore.DevFileCandidates(Common.Simple.SimpleEnv.GitRoot(), Common.Simple.SimpleEnv.Detect().AppRoot);
+        foreach (var path in looked)
+            if (System.IO.File.Exists(path))
+                return path;
+        throw new Common.Exceptions.StashLockException(looked.Length == 0
+            ? "FromDevFile(): not inside a git checkout. Pass a path: FromDevFile(path)."
+            : $"FromDevFile(): no dev secrets file found. Looked in: {string.Join(", ", looked)}.");
+    }
+
     private static StashLockConfigurationSource BuildConfigurationSource(StashLockBuilder slBuilder)
     {
         switch (slBuilder.Mode)
@@ -56,7 +68,7 @@ public static class StashLockConfigurationExtensions
                 return new StashLockConfigurationSource
                 {
                     Mode = StashLockSourceMode.DevFile,
-                    FilePath = slBuilder.FilePath
+                    FilePath = slBuilder.FilePath ?? FindDevFile()
                 };
 
             default:

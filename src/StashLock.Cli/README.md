@@ -13,10 +13,11 @@ dotnet tool install -g Deneblab.StashLock.Cli
 ### 1. Initialize a vault directory
 
 ```bash
-stashlock init ./my-vault -tags production,develop
+stashlock init ./my-vault --tags production,develop
+stashlock init ./my-vault --name myapp --tags production,develop --url https://vault.example.com
 ```
 
-Creates a `stashlock.config.json` with the specified environment tags and auto-generates key files for each tag.
+Creates a `stashlock.config.json` with the specified environment tags, generates key files for each tag (file mode 0600) and adds `stashlock.key.*.json` to `.gitignore`. The vault name (the `box` in `box.tag.version`) is `--name`, or the target directory's name. Options: `--tags`/`-t`, `--name`, `--url`.
 
 ### 2. Generate key pairs
 
@@ -47,7 +48,7 @@ stashlock decode ./my-vault/stashlock.enc.production.secrets.json
 Decrypts an encrypted `stashlock.enc.*.json` file back to plaintext JSON. Auto-detects encryption mode and key file.
 
 **Options:**
-- `-key <path>` — Specify key file path (auto-detected if omitted)
+- `--key <path>` — Specify key file path (auto-detected if omitted)
 - `-output <path>` — Write to file instead of stdout
 
 ### 5. Publish to vault server
@@ -94,18 +95,18 @@ stashlock cstring ./my-vault --tag production --env
 
 Reads `stashlock.config.json` (ServerUrl, Name), `stashlock.key.{tag}.json` (PrivateKey) and the API key (`--api-key` or `STASHLOCK_API_KEY`), generates a connection string in `Key=Value;Key=Value` format.
 
-Output includes plain text, base64-encoded, and a copy-paste `set`/`export` command.
+Output includes plain text, base64-encoded, and a copy-paste command (`export NAME="…"` on Linux/macOS, `set "NAME=…"` in Windows cmd). The plain string is also copied to the clipboard when `clip`, `pbcopy`, `wl-copy`, `xclip` or `xsel` is available.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `stashlock init <dir> [-tags <tags>]` | Initialize a vault directory with config and tags |
+| `stashlock init <dir> [--tags <tags>] [--name <name>] [--url <url>]` | Initialize a vault directory with config, keys and `.gitignore` |
 | `stashlock keygen <dir>` | Generate X25519 key pairs for each configured tag |
 | `stashlock encode <file>` | Encrypt a secrets file for all configured tags |
-| `stashlock decode <file> [-key <path>] [-output <path>]` | Decrypt a secrets file |
+| `stashlock decode <file> [--key <path>] [--output <path>]` | Decrypt a secrets file |
 | `stashlock publish <path> [--url <url>] [--api-key <key>] [--expires-in <sec>]` | Publish encrypted files to vault server |
-| `stashlock cstring <dir> [--tag <tag>] [--base64] [--env]` | Generate connection string from vault directory |
+| `stashlock cstring <dir> [--tag <tag>] [--api-key <key>] [--base64] [--env]` | Generate connection string from vault directory |
 
 ## Exit Codes and Output
 

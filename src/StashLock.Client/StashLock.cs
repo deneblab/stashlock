@@ -10,8 +10,12 @@ public static class StashLock
     /// </summary>
     /// <example>
     /// <code>
+    /// // Uses STASHLOCK_CONNECTION_STRING when set
+    /// var store = await StashLock.CreateClient().OpenAsync();
+    ///
     /// var store = await StashLock.CreateClient()
-    ///     .FromEnvironment()
+    ///     .WithBox("myapp", "production")
+    ///     .WithCache(ttl: TimeSpan.FromHours(2))
     ///     .OpenAsync();
     /// </code>
     /// </example>

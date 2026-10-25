@@ -27,7 +27,8 @@ public class StashLockHttpClient : IDisposable
     public StashLockHttpClient(string baseUrl, string apiKey = null, ILogger logger = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
-            throw new VaultConfigurationException("BaseUrl", "API base URL cannot be null or empty");
+            throw new VaultConfigurationException("ApiUrl",
+                "No server URL. Call WithApiUrl(), set STASHLOCK_API_URL, or add Url=... to the connection string.");
 
         _baseUrl = baseUrl.TrimEnd('/');
         _apiKey = apiKey;

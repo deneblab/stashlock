@@ -10,7 +10,7 @@
 		<PackageId>Deneblab.StashLock.Client</PackageId>
 		<Authors>Deneblab</Authors>
 		<Company>Deneblab</Company>
-		<Description>Async-first secrets management client for StashLock vault with IConfiguration integration. Supports multiple secret sources including remote encrypted vaults, local encrypted files, and environment variables.</Description>
+		<Description>Async-first client for the StashLock secrets vault: fetches and decrypts X25519 ECIES-encrypted secrets from the server (with an encrypted offline cache) or from local encrypted files, configured by fluent builder, connection string or IConfiguration.</Description>
 		<PackageTags>secrets;vault;configuration;stashlock;async;secrets-management;environment-variables</PackageTags>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageProjectUrl>https://github.com/deneblab/stashlock</PackageProjectUrl>

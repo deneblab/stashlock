@@ -112,7 +112,7 @@ var store = await StashLock.CreateClient()
 ```csharp
 // Plain JSON file (development)
 var store = await StashLock.CreateClient()
-    .FromDevFile()                    // auto-discovers dev/secrets/secrets.json
+    .FromDevFile()                    // finds <repo root>/dev/secrets/secrets.json
     .OpenAsync();
 
 // Explicit plain JSON file
@@ -286,7 +286,7 @@ catch (DecryptionException ex)
 
 ## Development Secrets File
 
-Create a `secrets.json` in `dev/secrets/` under your project root:
+Create `dev/secrets/secrets.json` in the root of your git repository (flat keys or nested JSON):
 
 ```json
 {
@@ -296,7 +296,7 @@ Create a `secrets.json` in `dev/secrets/` under your project root:
 }
 ```
 
-`FromDevFile()` (without a path) auto-discovers this file when running in Dev or Test mode.
+`FromDevFile()` (without a path) finds this file when running in Dev or Test mode.
 
 ## License
 
