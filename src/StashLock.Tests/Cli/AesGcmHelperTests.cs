@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Xunit;
+using Deneblab.StashLock.Shared.Crypto;
 
 namespace Deneblab.StashLock.Tests.Cli;
 

@@ -41,8 +41,8 @@ A secure, lightweight key-value storage system (secrets vault) with a REST API, 
 | Component | What it is | Install |
 |-----------|------------|---------|
 | `StashLock.Server` | Go web server: REST API, admin dashboard, SQLite | `ghcr.io/deneblab/stashlock-server` |
-| `StashLock.Cli` | Creates vaults and keys, encrypts, decrypts and publishes (needs .NET 8+) | `dotnet tool install -g Deneblab.StashLock.Cli` |
-| `StashLock.Client` | .NET library that fetches and decrypts secrets, with cache and `IConfiguration` support (net8.0) | `dotnet add package Deneblab.StashLock.Client` |
+| `StashLock.Cli` | Creates vaults and keys, encrypts, decrypts and publishes (needs the .NET 10 runtime or newer) | `dotnet tool install -g Deneblab.StashLock.Cli` |
+| `StashLock.Client` | .NET library that fetches and decrypts secrets, with cache and `IConfiguration` support (net8.0 and net10.0) | `dotnet add package Deneblab.StashLock.Client` |
 
 ## Quick API check
 
@@ -234,7 +234,7 @@ docker build -t stashlock-server:local .
 ### Prerequisites
 
 - [Go](https://go.dev/dl/) matching `src/StashLock.Server/go.mod` (server)
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (tests, build tooling; `global.json` pins it). The CLI and client themselves target .NET 8.
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (`global.json` pins it). The CLI targets .NET 10; the client targets .NET 8 and .NET 10.
 
 ### Building
 
@@ -243,9 +243,14 @@ cd src/StashLock.Server && go build -o stashlock-server .     # server
 dotnet build src/StashLock.Cli && dotnet build src/StashLock.Client
 ```
 
-### .NET Aspire
+### Build tasks (Nuke)
 
-`src/StashLock.AspireApp/StashLock.AspireApp.AppHost` exists but does not start the Go server yet, so it is not useful for local runs today (tracked in SL-065). Run the server binary or Docker directly.
+```bash
+./build.sh TestAll        # dotnet test + go vet + go test -race
+./build.sh GoBuild        # server binary in artifacts/server/
+./build.sh DockerBuild    # stashlock-server:<version> image
+./build.sh PackCliTool    # CLI NuGet package in artifacts/
+```
 
 ### Project Structure
 
@@ -253,10 +258,10 @@ dotnet build src/StashLock.Cli && dotnet build src/StashLock.Client
 StashLock/
 ├── src/
 │   ├── StashLock.Server/      # Go server (API, dashboard, SQLite)
-│   ├── StashLock.Cli/         # stashlock CLI (.NET tool, net8.0)
-│   ├── StashLock.Client/      # Client library (net8.0)
+│   ├── StashLock.Cli/         # stashlock CLI (.NET tool, net10.0)
+│   ├── StashLock.Client/      # Client library (net8.0, net10.0)
+│   ├── StashLock.Shared/      # Crypto and file formats compiled into CLI and client
 │   ├── StashLock.Tests/       # xUnit tests, incl. contract tests against the Go server
-│   ├── StashLock.AspireApp/   # .NET Aspire AppHost (not wired to the Go server yet)
 │   └── build/                 # Nuke build automation
 ├── docs/                      # Deployment guide (docker-compose.md)
 ├── docker-compose.yml         # Minimal compose file

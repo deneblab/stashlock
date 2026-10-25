@@ -201,7 +201,7 @@ public static class SimpleEnv
     {
         return mode switch
         {
-            SimpleAppMode.Docker => Environment.GetEnvironmentVariable("SIMPLE_ENV_ROOT") ?? "/home/app",
+            SimpleAppMode.Docker => Environment.GetEnvironmentVariable("SIMPLE_ENV_ROOT") ?? "/app", // same root as the client library
             SimpleAppMode.Test => FindTestRoot(),
             SimpleAppMode.Dev => FindDevRoot(),
             SimpleAppMode.DotnetTool => GetUserAppRoot(org!, app!),

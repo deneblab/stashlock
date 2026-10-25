@@ -7,9 +7,11 @@ using Deneblab.StashLock.Cli.Modules.Ecies;
 using Deneblab.StashLock.Client.Configuration;
 using Microsoft.Extensions.Configuration;
 using Xunit;
-using CliAesGcmHelper = Deneblab.StashLock.Cli.Modules.Ecies.AesGcmHelper;
-using CliSopsEncryptedFile = Deneblab.StashLock.Cli.Modules.Encode.SopsEncryptedFile;
-using CliSopsMetadata = Deneblab.StashLock.Cli.Modules.Encode.SopsMetadata;
+using CliAesGcmHelper = Deneblab.StashLock.Shared.Crypto.AesGcmHelper;
+using CliSopsEncryptedFile = Deneblab.StashLock.Shared.Formats.SopsEncryptedFile;
+using CliSopsMetadata = Deneblab.StashLock.Shared.Formats.SopsMetadata;
+using Deneblab.StashLock.Shared.Crypto;
+using Deneblab.StashLock.Shared.Formats;
 
 namespace Deneblab.StashLock.Tests.Client;
 
@@ -213,7 +215,7 @@ public class StashLockConfigurationTests : IDisposable
             Encoding.UTF8.GetBytes(plainJson),
             keyPair.GetPublicKeyBytes());
 
-        var encFile = new Deneblab.StashLock.Cli.Modules.Encode.StashlockEncryptedFile
+        var encFile = new Deneblab.StashLock.Shared.Formats.StashlockEncryptedFile
         {
             VaultKey = "app.test.00001",
             EncryptedData = Convert.ToBase64String(sealedBytes)

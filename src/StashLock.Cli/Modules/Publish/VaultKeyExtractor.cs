@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using Deneblab.StashLock.Cli.Modules.Encode;
+using Deneblab.StashLock.Shared.Formats;
 
 namespace Deneblab.StashLock.Cli.Modules.Publish;
 

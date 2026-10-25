@@ -106,52 +106,6 @@ public class StashLockHttpClient : IDisposable
         }
     }
 
-    /// <summary>
-    /// Creates or updates a vault entry asynchronously.
-    /// </summary>
-    /// <param name="key">The vault key (Base64 URL-encoded)</param>
-    /// <param name="encryptedData">The encrypted data to store</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <exception cref="StashLockException">Thrown when the operation fails</exception>
-    public async Task SetAsync(string key, string encryptedData, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentNullException(nameof(key));
-        if (string.IsNullOrWhiteSpace(encryptedData))
-            throw new ArgumentNullException(nameof(encryptedData));
-
-        var url = $"{_baseUrl}/boxes/{key}";
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, url);
-
-        if (!string.IsNullOrWhiteSpace(_apiKey))
-        {
-            request.Headers.Add("Authorization", $"Bearer {_apiKey}");
-        }
-
-        request.Content = new StringContent(encryptedData, System.Text.Encoding.UTF8, "text/plain");
-
-        _log.LogDebug("HTTP POST {Path}", $"/boxes/{key}");
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        try
-        {
-            var response = await SharedHttpClient.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            _log.LogInformation("HTTP POST {Path} -> {StatusCode} ({ElapsedMs}ms)",
-                $"/boxes/{key}", (int)response.StatusCode, sw.ElapsedMilliseconds);
-        }
-        catch (HttpRequestException ex)
-        {
-            _log.LogError("HTTP POST {Path} failed: connection error ({ElapsedMs}ms)", $"/boxes/{key}", sw.ElapsedMilliseconds);
-            throw new StashLockException($"Failed to set vault entry for key '{key}': {ex.Message}", ex);
-        }
-        catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            _log.LogError("HTTP POST {Path} failed: timeout ({ElapsedMs}ms)", $"/boxes/{key}", sw.ElapsedMilliseconds);
-            throw new StashLockException($"Request timeout while setting vault entry for key '{key}'", ex);
-        }
-    }
-
     public void Dispose()
     {
         if (_disposed) return;

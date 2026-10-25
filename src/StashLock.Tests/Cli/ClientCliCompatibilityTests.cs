@@ -5,10 +5,12 @@ using System.Text.Json;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Deneblab.StashLock.Client.Common;
 using Xunit;
-using CliSopsEncryptedFile = Deneblab.StashLock.Cli.Modules.Encode.SopsEncryptedFile;
-using CliSopsMetadata = Deneblab.StashLock.Cli.Modules.Encode.SopsMetadata;
-using CliStashlockEncryptedFile = Deneblab.StashLock.Cli.Modules.Encode.StashlockEncryptedFile;
-using CliAesGcmHelper = Deneblab.StashLock.Cli.Modules.Ecies.AesGcmHelper;
+using CliSopsEncryptedFile = Deneblab.StashLock.Shared.Formats.SopsEncryptedFile;
+using CliSopsMetadata = Deneblab.StashLock.Shared.Formats.SopsMetadata;
+using CliStashlockEncryptedFile = Deneblab.StashLock.Shared.Formats.StashlockEncryptedFile;
+using CliAesGcmHelper = Deneblab.StashLock.Shared.Crypto.AesGcmHelper;
+using Deneblab.StashLock.Shared.Crypto;
+using Deneblab.StashLock.Shared.Formats;
 
 namespace Deneblab.StashLock.Tests.Cli;
 

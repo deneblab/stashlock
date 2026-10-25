@@ -17,7 +17,7 @@ services:
       - ./app/log:/app/log
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "/app/stashlock-servergo", "healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3

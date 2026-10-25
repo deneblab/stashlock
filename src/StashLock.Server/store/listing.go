@@ -233,3 +233,29 @@ func (s *StorageService) PurgeDeleted(before time.Time) (int64, error) {
 	n, _ := res.RowsAffected()
 	return n, tx.Commit()
 }
+
+// ApiStats returns the numbers served by GET /stats (response shape kept for API compatibility).
+func (s *StorageService) ApiStats() (*models.StatsResponse, error) {
+	nowStr := time.Now().UTC().Format(time.RFC3339Nano)
+	st := &models.StatsResponse{}
+	queries := []struct {
+		dst  interface{}
+		sql  string
+		args []interface{}
+	}{
+		{&st.TotalKeys, "SELECT COUNT(*) FROM KeyValues", nil},
+		{&st.DeletedKeys, "SELECT COUNT(*) FROM KeyValues WHERE IsDeleted = 1", nil},
+		{&st.ExpiredKeys, "SELECT COUNT(*) FROM KeyValues WHERE IsDeleted = 0 AND ExpiresAt IS NOT NULL AND ExpiresAt != '' AND ExpiresAt < ?", []interface{}{nowStr}},
+		{&st.TotalSizeBytes, "SELECT COALESCE(SUM(LENGTH(Value)), 0) FROM KeyValues WHERE IsDeleted = 0 AND (ExpiresAt IS NULL OR ExpiresAt = '' OR ExpiresAt >= ?)", []interface{}{nowStr}},
+		{&st.TotalApiKeys, "SELECT COUNT(*) FROM ApiKeys", nil},
+		{&st.ActiveApiKeys, "SELECT COUNT(*) FROM ApiKeys WHERE IsActive = 1", nil},
+		{&st.TotalAuditEvents, "SELECT COUNT(*) FROM AuditLogs", nil},
+	}
+	for _, q := range queries {
+		if err := s.db.Get(q.dst, q.sql, q.args...); err != nil {
+			return nil, fmt.Errorf("stats: %w", err)
+		}
+	}
+	st.ActiveKeys = st.TotalKeys - st.DeletedKeys - st.ExpiredKeys
+	return st, nil
+}

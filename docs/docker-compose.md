@@ -21,9 +21,18 @@ docker pull ghcr.io/deneblab/stashlock-server:latest
 
 For production deployments pin a version or `sha-` tag instead of `latest`.
 
-The container listens on port `8080`, keeps data in `/app/work` (SQLite database at `/app/work/db/stashlock.sqlite`) and has a `/healthz` endpoint.
+The container listens on port `8080`, keeps data in `/app/work` (SQLite database at `/app/work/db/stashlock.sqlite`) and logs in `/app/log`. It runs as uid `10001` and has a built-in health check (`stashlock-servergo healthcheck`, which calls `/healthz`).
 
 ## Before the first start
+
+The container runs as an unprivileged user (uid/gid `10001`). Create the bind-mounted folders and give them to that user:
+
+```bash
+mkdir -p app/work app/log
+sudo chown -R 10001:10001 app/work app/log
+```
+
+Upgrading from an image that ran as root? Run the same `chown` on the existing folders before starting the new image, or the server cannot open its database.
 
 Put the one-time master key in a `.env` file next to `docker-compose.yml`:
 
@@ -51,7 +60,7 @@ services:
       - ./app/log:/app/log
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "/app/stashlock-servergo", "healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3

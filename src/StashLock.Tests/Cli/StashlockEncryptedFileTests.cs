@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Deneblab.StashLock.Cli.Modules.Encode;
 using Xunit;
+using Deneblab.StashLock.Shared.Formats;
 
 namespace Deneblab.StashLock.Tests.Cli;
 

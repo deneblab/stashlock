@@ -34,6 +34,11 @@ var templatesFS embed.FS
 var staticFS embed.FS
 
 func main() {
+	// "stashlock-servergo healthcheck": used by the Docker HEALTHCHECK (the image has no curl)
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(healthcheck())
+	}
+
 	// Set embedded filesystems for handlers
 	handlers.TemplateFS = templatesFS
 	handlers.StaticEmbedFS = staticFS
@@ -60,6 +65,26 @@ func main() {
 		log.Fatal().Err(err).Msg("Server failed")
 	}
 	log.Info().Msg("Server stopped")
+}
+
+// healthcheck calls /healthz on the local server and returns the process exit code.
+func healthcheck() int {
+	port := os.Getenv("STASHLOCK_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + port + "/healthz")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "unhealthy:", err)
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "unhealthy: status", resp.StatusCode)
+		return 1
+	}
+	return 0
 }
 
 // Server timeouts protect against slow or stalled clients.
@@ -167,7 +192,7 @@ func newRouter(cfg *config.Config, db *sqlx.DB, storage *store.StorageService, a
 	healthHandler := handlers.NewHealthHandler(db)
 	keysHandler := handlers.NewKeysHandler(apiKeyStore, auditStore)
 	auditHandler := handlers.NewAuditHandler(auditStore)
-	statsHandler := handlers.NewStatsHandler(db, cfg.Version)
+	statsHandler := handlers.NewStatsHandler(storage, cfg.Version)
 	authGuard := mw.NewAuthGuard(cfg.TrustedProxyNetworks())
 
 	r := chi.NewRouter()

@@ -4,6 +4,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Deneblab.StashLock.Client.Common.Exceptions;
+using Deneblab.StashLock.Shared.Crypto;
+using Deneblab.StashLock.Shared.Formats;
 
 namespace Deneblab.StashLock.Client.Common;
 

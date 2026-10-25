@@ -1,10 +1,12 @@
+#nullable enable
+// Shared source: compiled into StashLock.Cli and StashLock.Client (see StashLock.Shared/README.md)
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace Deneblab.StashLock.Client.Common;
+namespace Deneblab.StashLock.Shared.Formats;
 
 /// <summary>
-///     SOPS-mode encrypted file format. Matches CLI output.
+///     SOPS-mode encrypted file format. Written by the CLI, read by the CLI and the client.
 /// </summary>
 internal class SopsEncryptedFile
 {
@@ -34,7 +36,7 @@ internal class SopsMetadata
 }
 
 /// <summary>
-///     Whole-file mode encrypted file format. Matches CLI output.
+///     Whole-file mode encrypted file format. Written by the CLI, read by the CLI and the client.
 /// </summary>
 internal class StashlockEncryptedFile
 {

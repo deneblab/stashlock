@@ -10,6 +10,8 @@ using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Models;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Microsoft.Extensions.Logging;
+using Deneblab.StashLock.Shared.Crypto;
+using Deneblab.StashLock.Shared.Formats;
 
 namespace Deneblab.StashLock.Cli.Modules.Encode;
 

@@ -1,14 +1,16 @@
+#nullable enable
+// Shared source: compiled into StashLock.Cli and StashLock.Client (see StashLock.Shared/README.md)
 using System;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Deneblab.StashLock.Cli.Modules.Ecies;
+namespace Deneblab.StashLock.Shared.Crypto;
 
 /// <summary>
 ///     Helper for per-value AES-256-GCM encryption/decryption.
 ///     Format: ENC[AesGcm:base64(nonce(12) + ciphertext + tag(16))]
 /// </summary>
-public static class AesGcmHelper
+internal static class AesGcmHelper
 {
     private const int NonceSize = 12;
     private const int TagSize = 16;

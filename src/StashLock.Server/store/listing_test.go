@@ -185,3 +185,18 @@ func TestPurgeDeletedAndIsLive(t *testing.T) {
 		t.Error("recently deleted entry must stay restorable")
 	}
 }
+
+func TestApiStats(t *testing.T) {
+	db := setupTestDB(t)
+	s := NewStorageService(db, 1024)
+	_ = s.Set(mustKey(t, "app.develop.00001"), "abc", nil)
+	_ = s.Set(mustKey(t, "app.develop.00002"), "de", nil)
+	_ = s.Delete(mustKey(t, "app.develop.00002"))
+	st, err := s.ApiStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.TotalKeys != 2 || st.DeletedKeys != 1 || st.ActiveKeys != 1 || st.TotalSizeBytes != 3 {
+		t.Errorf("stats = %+v", st)
+	}
+}

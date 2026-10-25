@@ -4,7 +4,7 @@ This guide walks you through the most common StashLock workflows — from deploy
 
 ## Prerequisites
 
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download) or later (for the CLI and your application)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) or later for the CLI; your application can target .NET 8 or newer
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose (for server deployment)
 
 ---
@@ -27,11 +27,17 @@ services:
       - ./app/log:/app/log
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "/app/stashlock-servergo", "healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+```
+
+The container runs as uid `10001`; create the data folders for it first:
+
+```bash
+mkdir -p app/work app/log && sudo chown -R 10001:10001 app/work app/log
 ```
 
 Create a `.env` file next to `docker-compose.yml` with a one-time master key of 32+ characters:
