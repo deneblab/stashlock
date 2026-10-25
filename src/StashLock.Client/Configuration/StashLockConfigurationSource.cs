@@ -35,6 +35,9 @@ internal class StashLockConfigurationSource : IConfigurationSource
     /// <summary>Source mode.</summary>
     public StashLockSourceMode Mode { get; set; }
 
+    /// <summary>Remote mode: the configured builder; loading goes through <see cref="StashLockBuilder.OpenAsync"/>.</summary>
+    public StashLockBuilder Builder { get; set; }
+
     public IConfigurationProvider Build(IConfigurationBuilder builder)
     {
         return new StashLockConfigurationProvider(this);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.Http;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -471,9 +472,10 @@ internal class SecretsStore : ISecretsStore
             CryptographicOperations.ZeroMemory(cacheKey);
             throw;
         }
-        catch (Exception ex) when (ex is not StashLockException || ex is StashLockException { InnerException: not null })
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested && IsServerOutage(ex))
         {
-            // 3. Server failed — try cache fallback
+            // 3. Server unreachable, timed out or failing (5xx) — try cache fallback.
+            //    401/403/404 are answers, not outages: they are never masked by cached data.
             cacheLog.LogWarning("Server unreachable for {Box}.{Tag}.{Version}; attempting cache fallback", box, tag, version);
             try
             {
@@ -507,6 +509,23 @@ internal class SecretsStore : ISecretsStore
             // No valid cache — re-throw original exception
             throw;
         }
+    }
+
+    /// <summary>
+    ///     True when the server could not answer (connection error, timeout, 5xx) — the only
+    ///     cases where cached secrets may stand in for the server.
+    /// </summary>
+    internal static bool IsServerOutage(Exception ex)
+    {
+        if (ex is VaultNotFoundException or VaultAccessDeniedException or DecryptionException or VaultConfigurationException)
+            return false;
+        var cause = ex is StashLockException && ex.InnerException != null ? ex.InnerException : ex;
+        return cause switch
+        {
+            HttpRequestException http => http.StatusCode == null || (int)http.StatusCode.Value >= 500,
+            OperationCanceledException or TimeoutException => true,
+            _ => false
+        };
     }
 
     private static async Task<ISecretsStore> OpenCacheFirstAsync(

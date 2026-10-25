@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Deneblab.StashLock.Cli.Modules.Encode;
@@ -48,7 +49,7 @@ internal class DecodeCommands
     /// <param name="output">-output, Optional output file path (prints to stdout if omitted)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
-    public Task Root(
+    public Task<int> Root(
         [Argument] string file,
         string key = "",
         string output = "",
@@ -61,9 +62,9 @@ internal class DecodeCommands
         if (!File.Exists(filePath))
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error: Encrypted file not found: {filePath}");
+            Console.Error.WriteLine($"Error: Encrypted file not found: {filePath}");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         var fileDir = Path.GetDirectoryName(filePath)!;
@@ -76,17 +77,17 @@ internal class DecodeCommands
             if (parsed == null)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Error: Failed to parse encrypted file");
+                Console.Error.WriteLine("Error: Failed to parse encrypted file");
                 Console.ResetColor();
-                return Task.CompletedTask;
+                return Task.FromResult(ExitCodes.Error);
             }
         }
         catch (JsonException ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error: Invalid JSON in encrypted file: {ex.Message}");
+            Console.Error.WriteLine($"Error: Invalid JSON in encrypted file: {ex.Message}");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         // Auto-detect mode
@@ -102,14 +103,14 @@ internal class DecodeCommands
         else
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Error: Unrecognized encrypted file format.");
-            Console.WriteLine("Expected '_stashlock' (sops mode) or 'EncryptedData' (wholefile mode).");
+            Console.Error.WriteLine("Error: Unrecognized encrypted file format.");
+            Console.Error.WriteLine("Expected '_stashlock' (sops mode) or 'EncryptedData' (wholefile mode).");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         if (result == null!)
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
 
         if (!string.IsNullOrEmpty(output))
         {
@@ -127,7 +128,7 @@ internal class DecodeCommands
             Console.WriteLine(result);
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(ExitCodes.Ok);
     }
 
     private string DecodeSopsMode(string json, string keyOverride, string fileDir)
@@ -278,8 +279,8 @@ internal class DecodeCommands
         {
             PrintError($"Error: Key file not found: {keyFilePath}");
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Hint: Use -key to specify the key file path, e.g.:");
-            Console.WriteLine("  stashlock decode <file> -key path/to/stashlock.key.<tag>.json");
+            Console.Error.WriteLine("Hint: Use -key to specify the key file path, e.g.:");
+            Console.Error.WriteLine("  stashlock decode <file> -key path/to/stashlock.key.<tag>.json");
             Console.ResetColor();
             return null;
         }
@@ -436,7 +437,7 @@ internal class DecodeCommands
     private static void PrintError(string message)
     {
         Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine(message);
+        Console.Error.WriteLine(message);
         Console.ResetColor();
     }
 }

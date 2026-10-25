@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/deneblab/stashlock-servergo/models"
@@ -13,8 +14,9 @@ import (
 
 // StorageService handles key-value CRUD operations.
 type StorageService struct {
-	db               *sqlx.DB
+	db                *sqlx.DB
 	maxValueSizeBytes int
+	writeMu           sync.Mutex // serialises Set so history numbering stays consistent
 }
 
 func NewStorageService(db *sqlx.DB, maxValueSizeBytes int) *StorageService {
@@ -34,12 +36,21 @@ func (s *StorageService) Set(key *models.KeyStore, value string, expiresAt *stri
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	keyAddress := key.FullAddress()
 
+	// Read, history insert and update must not interleave with another write of the same key
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+
 	var entity models.KeyValueEntity
-	err := s.db.Get(&entity, "SELECT * FROM KeyValues WHERE Key = ?", keyAddress)
+	err = tx.Get(&entity, "SELECT * FROM KeyValues WHERE Key = ?", keyAddress)
 
 	if err == sql.ErrNoRows {
 		// Insert new
-		_, err = s.db.Exec(
+		_, err = tx.Exec(
 			"INSERT INTO KeyValues (Key, Value, CreatedAt, UpdatedAt, IsDeleted, ExpiresAt) VALUES (?, ?, ?, ?, 0, ?)",
 			keyAddress, value, now, now, nullStr(expiresAt),
 		)
@@ -52,7 +63,7 @@ func (s *StorageService) Set(key *models.KeyStore, value string, expiresAt *stri
 		// Save history for non-deleted entities before overwriting
 		if !entity.IsDeleted {
 			var maxVersion sql.NullInt64
-			err = s.db.Get(&maxVersion, "SELECT MAX(VersionNumber) FROM KeyValueHistory WHERE BoxKey = ?", keyAddress)
+			err = tx.Get(&maxVersion, "SELECT MAX(VersionNumber) FROM KeyValueHistory WHERE BoxKey = ?", keyAddress)
 			if err != nil {
 				return fmt.Errorf("query max version: %w", err)
 			}
@@ -62,7 +73,7 @@ func (s *StorageService) Set(key *models.KeyStore, value string, expiresAt *stri
 				nextVersion = int(maxVersion.Int64) + 1
 			}
 
-			_, err = s.db.Exec(
+			_, err = tx.Exec(
 				"INSERT INTO KeyValueHistory (BoxKey, Value, VersionNumber, SavedAt) VALUES (?, ?, ?, ?)",
 				keyAddress, entity.Value, nextVersion, now,
 			)
@@ -73,12 +84,12 @@ func (s *StorageService) Set(key *models.KeyStore, value string, expiresAt *stri
 
 		// Update existing (or restore soft-deleted)
 		if entity.IsDeleted {
-			_, err = s.db.Exec(
+			_, err = tx.Exec(
 				"UPDATE KeyValues SET Value = ?, UpdatedAt = ?, IsDeleted = 0, DeletedAt = NULL, ExpiresAt = ? WHERE Key = ?",
 				value, now, nullStr(expiresAt), keyAddress,
 			)
 		} else {
-			_, err = s.db.Exec(
+			_, err = tx.Exec(
 				"UPDATE KeyValues SET Value = ?, UpdatedAt = ?, ExpiresAt = ? WHERE Key = ?",
 				value, now, nullStr(expiresAt), keyAddress,
 			)
@@ -86,6 +97,10 @@ func (s *StorageService) Set(key *models.KeyStore, value string, expiresAt *stri
 		if err != nil {
 			return fmt.Errorf("update key: %w", err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
 	}
 
 	log.Info().Str("key", keyAddress).Msg("Stored value")

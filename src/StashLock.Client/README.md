@@ -12,6 +12,7 @@ dotnet add package Deneblab.StashLock.Client
 
 ```csharp
 using Deneblab.StashLock.Client;
+using Deneblab.StashLock.Client.Common.Exceptions;
 
 // Auto-reads STASHLOCK_CONNECTION_STRING env var
 var store = await StashLock.CreateClient()
@@ -75,6 +76,8 @@ var store = await StashLock.CreateClient()
     .WithCache(cacheDir: "/app/cache", ttl: TimeSpan.FromHours(4))
     .OpenAsync();
 ```
+
+The cache answers only when the server cannot: connection errors, timeouts and 5xx responses. A rejected key (401/403) or a missing entry (404) is reported at once and never answered from the cache, so revoking an API key takes effect immediately.
 
 ### Cache-first strategy
 
@@ -176,7 +179,7 @@ var dbConfig = store.GetSection<DatabaseConfig>("Database");
 
 ## IConfiguration Integration
 
-Single `AddStashLock` extension method with the same fluent builder:
+Single `AddStashLock` extension method with the same fluent builder. Remote sources load through the same code path as `OpenAsync()`, so timeouts, logging, cache strategies and `STASHLOCK_CONNECTION_STRING` behave identically (`AddStashLock(_ => { })` uses the connection string alone):
 
 ```csharp
 using Deneblab.StashLock.Client.Configuration;
@@ -269,6 +272,11 @@ catch (VaultConfigurationException ex)
 catch (VaultNotFoundException ex)
 {
     // Vault entry not found on server
+}
+catch (VaultAccessDeniedException ex)
+{
+    // 401: API key wrong, revoked or expired; 403: key not valid for this box.tag
+    // ex.StatusCode tells which. Never answered from the cache.
 }
 catch (DecryptionException ex)
 {

@@ -23,9 +23,6 @@ namespace Deneblab.StashLock.Client.Configuration;
 internal class StashLockConfigurationProvider : ConfigurationProvider
 {
     private const string ENV_PRIVATE_KEY = "STASHLOCK_PRIVATE_KEY";
-    private const string ENV_API_URL = "STASHLOCK_API_URL";
-    private const string ENV_API_KEY = "STASHLOCK_API_KEY";
-    private const string DEFAULT_API_URL = "";
 
     private readonly StashLockConfigurationSource _source;
 
@@ -56,99 +53,12 @@ internal class StashLockConfigurationProvider : ConfigurationProvider
         Data = new Dictionary<string, string>(secrets, StringComparer.OrdinalIgnoreCase);
     }
 
+    // Remote mode uses the same code path as StashLockBuilder.OpenAsync: connection string,
+    // timeout, logging and every cache strategy behave identically.
     private Dictionary<string, string> LoadRemote()
     {
-        var privateKeyBytes = ResolvePrivateKey();
-        var apiUrl = _source.ApiUrl
-                     ?? Environment.GetEnvironmentVariable(ENV_API_URL)
-                     ?? DEFAULT_API_URL;
-        var apiKey = _source.ApiKey
-                     ?? Environment.GetEnvironmentVariable(ENV_API_KEY);
-
-        var webKey = $"{_source.Box}.{_source.Tag}.{_source.Version}";
-        var webKeyBytes = Encoding.UTF8.GetBytes(webKey);
-        var webKeySafeUrl = Convert.ToBase64String(webKeyBytes)
-            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
-
-        // Resolve cache (if configured)
-        byte[] cacheKey = null;
-        string cacheFilePath = null;
-        var cacheOpts = _source.CacheOptions;
-        if (cacheOpts != null)
-        {
-            var cacheDir = cacheOpts.CacheDir;
-            if (string.IsNullOrWhiteSpace(cacheDir))
-            {
-                var env = SimpleEnv.Detect();
-                cacheDir = Path.Combine(env.ConfigDir, "cache");
-            }
-            cacheFilePath = SecretsCacheManager.GetCacheFilePath(cacheDir, _source.Box, _source.Tag, _source.Version);
-            cacheKey = SecretsCacheManager.DeriveCacheKey(privateKeyBytes, cacheOpts.MachineId);
-        }
-
-        // CacheFirst: try cache before server
-        if (cacheOpts != null && cacheOpts.Strategy == CacheStrategy.CacheFirst && cacheKey != null)
-        {
-            try
-            {
-                var cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey);
-                if (cached != null)
-                {
-                    CryptographicOperations.ZeroMemory(cacheKey);
-                    return cached;
-                }
-            }
-            catch { }
-            // Cache miss — fall through to server fetch
-        }
-
-        // Resolve server timeout
-        var serverTimeout = cacheOpts?.ServerTimeout ?? TimeSpan.FromSeconds(30);
-
-        try
-        {
-            var httpClient = new StashLockHttpClient(apiUrl, apiKey);
-            using var cts = new CancellationTokenSource(serverTimeout);
-            var encryptedData = Task.Run(() => httpClient.GetAsync(webKeySafeUrl, cts.Token)).GetAwaiter().GetResult();
-
-            var secrets = SopsDecryptor.DecryptAutoDetect(encryptedData, privateKeyBytes);
-
-            // Update cache on success
-            if (cacheKey != null)
-            {
-                try
-                {
-                    SecretsCacheManager.WriteCache(cacheFilePath, secrets, cacheKey, cacheOpts.CacheTtl);
-                }
-                catch { }
-            }
-
-            return secrets;
-        }
-        catch (DecryptionException)
-        {
-            throw;
-        }
-        catch (Exception ex) when (cacheKey != null)
-        {
-            // Server failed — try cache fallback
-            try
-            {
-                var cached = SecretsCacheManager.ReadCache(cacheFilePath, cacheKey);
-                if (cached != null)
-                    return cached;
-            }
-            catch { }
-
-            // No valid cache
-            if (ex is StashLockException) throw;
-            throw new StashLockException($"Failed to open remote secrets store: {ex.Message}", ex);
-        }
-        finally
-        {
-            if (cacheKey != null)
-                CryptographicOperations.ZeroMemory(cacheKey);
-        }
+        var store = Task.Run(() => _source.Builder.OpenAsync()).GetAwaiter().GetResult();
+        return ((SecretsStore)store).ToDictionary();
     }
 
     private Dictionary<string, string> LoadEncryptedFile()

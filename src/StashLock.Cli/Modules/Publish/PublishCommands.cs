@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Models;
 using Microsoft.Extensions.Logging;
@@ -36,7 +37,7 @@ internal class PublishCommands
     /// <param name="verbose">Show resolved configuration before publishing</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
-    public async Task Root(
+    public async Task<int> Root(
         [Argument] string path,
         string url = "",
         string apiKey = "",
@@ -61,15 +62,15 @@ internal class PublishCommands
             {
                 PrintError($"Error: No stashlock.enc.*.json files found in {fullPath}");
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("Hint: Run 'stashlock encode <secrets.json>' first to generate encrypted files.");
+                Console.Error.WriteLine("Hint: Run 'stashlock encode <secrets.json>' first to generate encrypted files.");
                 Console.ResetColor();
-                return;
+                return ExitCodes.Error;
             }
         }
         else
         {
             PrintError($"Error: Path not found: {fullPath}");
-            return;
+            return ExitCodes.Error;
         }
 
         // Try to load config from vault directory
@@ -81,7 +82,7 @@ internal class PublishCommands
         if (apiUrl == null)
         {
             PrintError($"Error: No server URL. Use --url, set {ServerSettings.UrlEnvVar}, or add ServerUrl to stashlock.config.json.");
-            return;
+            return ExitCodes.Error;
         }
 
         // Resolve API key: flag > env var (never from the config file)
@@ -89,18 +90,18 @@ internal class PublishCommands
         if (resolvedApiKey == null)
         {
             PrintError($"Error: No API key. Use --api-key or set {ServerSettings.ApiKeyEnvVar} (an API key created for the box.tag).");
-            return;
+            return ExitCodes.Error;
         }
 
         if (verbose)
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"  API URL:    {apiUrl}");
-            Console.WriteLine($"  API Key:    {resolvedApiKey[..Math.Min(8, resolvedApiKey.Length)]}...");
-            Console.WriteLine($"  Config:     {(config != null ? Path.Combine(configDir, "stashlock.config.json") : "(not found)")}");
-            Console.WriteLine($"  Files:      {files.Length}");
+            Console.Error.WriteLine($"  API URL:    {apiUrl}");
+            Console.Error.WriteLine($"  API Key:    {resolvedApiKey[..Math.Min(8, resolvedApiKey.Length)]}...");
+            Console.Error.WriteLine($"  Config:     {(config != null ? Path.Combine(configDir, "stashlock.config.json") : "(not found)")}");
+            Console.Error.WriteLine($"  Files:      {files.Length}");
             if (expiresIn.HasValue)
-                Console.WriteLine($"  TTL:        {expiresIn}s");
+                Console.Error.WriteLine($"  TTL:        {expiresIn}s");
             Console.ResetColor();
             Console.WriteLine();
         }
@@ -148,6 +149,7 @@ internal class PublishCommands
 
         Console.WriteLine();
         Console.WriteLine($"Publish complete: {published} published, {failed} failed.");
+        return failed == 0 ? ExitCodes.Ok : published > 0 ? ExitCodes.Partial : ExitCodes.Error;
     }
 
     private static StashlockConfig? LoadConfig(string directory)
@@ -167,7 +169,7 @@ internal class PublishCommands
     private static void PrintError(string message)
     {
         Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine(message);
+        Console.Error.WriteLine(message);
         Console.ResetColor();
     }
 }

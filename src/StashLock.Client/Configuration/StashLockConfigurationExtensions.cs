@@ -41,17 +41,7 @@ public static class StashLockConfigurationExtensions
         switch (slBuilder.Mode)
         {
             case StashLockBuilder.SourceMode.Box:
-                return new StashLockConfigurationSource
-                {
-                    Mode = StashLockSourceMode.Remote,
-                    Box = slBuilder.Box,
-                    Tag = slBuilder.Tag,
-                    Version = slBuilder.Version,
-                    CacheOptions = slBuilder.CacheOpts,
-                    PrivateKeyBase64 = slBuilder.PrivateKeyBase64,
-                    ApiUrl = slBuilder.ApiUrl,
-                    ApiKey = slBuilder.ApiKey
-                };
+                return new StashLockConfigurationSource { Mode = StashLockSourceMode.Remote, Builder = slBuilder };
 
             case StashLockBuilder.SourceMode.EncryptedFile:
                 return new StashLockConfigurationSource
@@ -70,8 +60,11 @@ public static class StashLockConfigurationExtensions
                 };
 
             default:
+                // No explicit source: STASHLOCK_CONNECTION_STRING (read by OpenAsync) may provide Box and Tag
+                if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("STASHLOCK_CONNECTION_STRING")))
+                    return new StashLockConfigurationSource { Mode = StashLockSourceMode.Remote, Builder = slBuilder };
                 throw new Common.Exceptions.StashLockException(
-                    "AddStashLock requires a source. Call WithBox(), FromEncryptedFile(), or FromDevFile() in the configure lambda.");
+                    "AddStashLock requires a source. Call WithConnectionString(), WithBox(), FromEncryptedFile() or FromDevFile() in the configure lambda, or set STASHLOCK_CONNECTION_STRING.");
         }
     }
 }

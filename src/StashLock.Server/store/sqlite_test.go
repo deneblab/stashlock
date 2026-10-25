@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -283,5 +284,40 @@ func TestGetVersion(t *testing.T) {
 	}
 	if val != "v1" {
 		t.Errorf("version 1 = %q, want %q", val, "v1")
+	}
+}
+
+func TestSet_ConcurrentWritesKeepHistoryConsistent(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sqlx.Open("sqlite", dir+"/c.sqlite?_journal_mode=WAL&_busy_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStorageService(db, 1024)
+	k := mustKey(t, "app.develop.00001")
+
+	const writers = 20
+	errs := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		go func(i int) { errs <- s.Set(k, fmt.Sprintf("v%d", i), nil) }(i)
+	}
+	for i := 0; i < writers; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("concurrent Set: %v", err)
+		}
+	}
+	h, _ := s.GetHistory(k)
+	if len(h) != writers-1 {
+		t.Errorf("history entries = %d, want %d", len(h), writers-1)
+	}
+	for i, e := range h {
+		if e.VersionNumber != writers-1-i {
+			t.Errorf("history not contiguous: %+v", h)
+			break
+		}
 	}
 }

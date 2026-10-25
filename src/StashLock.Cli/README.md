@@ -107,6 +107,21 @@ Output includes plain text, base64-encoded, and a copy-paste `set`/`export` comm
 | `stashlock publish <path> [--url <url>] [--api-key <key>] [--expires-in <sec>]` | Publish encrypted files to vault server |
 | `stashlock cstring <dir> [--tag <tag>] [--base64] [--env]` | Generate connection string from vault directory |
 
+## Exit Codes and Output
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Error (missing file or setting, rejected request, unknown command, missing argument) |
+| `2` | Partial success: `publish` sent some files but others failed |
+
+Errors, warnings and hints go to **stderr**; results go to **stdout**. `stashlock cstring … --base64` and `--env` print only the value on stdout, so they work in `$(…)`:
+
+```bash
+export STASHLOCK_CONNECTION_STRING=$(stashlock cstring ./my-vault --tag production --base64)
+stashlock publish ./my-vault/stashlock.enc.production.secrets.json || echo "publish failed"
+```
+
 ## Workflow
 
 ```

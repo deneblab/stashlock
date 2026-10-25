@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Models;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Microsoft.Extensions.Logging;
@@ -38,7 +39,7 @@ internal class GenerateCommands
     /// <param name="verbose">Show resolved configuration before encoding</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
-    public Task Root(
+    public Task<int> Root(
         [Argument] string file,
         bool verbose = false,
         CancellationToken cancellationToken = default)
@@ -50,9 +51,9 @@ internal class GenerateCommands
         if (!File.Exists(secretFilePath))
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error: Secrets file not found: {secretFilePath}");
+            Console.Error.WriteLine($"Error: Secrets file not found: {secretFilePath}");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         var secretsJson = File.ReadAllText(secretFilePath);
@@ -63,17 +64,17 @@ internal class GenerateCommands
             if (secretsRaw == null)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Error: Failed to parse secrets file as JSON object");
+                Console.Error.WriteLine("Error: Failed to parse secrets file as JSON object");
                 Console.ResetColor();
-                return Task.CompletedTask;
+                return Task.FromResult(ExitCodes.Error);
             }
         }
         catch (JsonException ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error: Invalid JSON in secrets file: {ex.Message}");
+            Console.Error.WriteLine($"Error: Invalid JSON in secrets file: {ex.Message}");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         var secretsDict = new Dictionary<string, string>();
@@ -84,10 +85,10 @@ internal class GenerateCommands
         if (!File.Exists(configPath))
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error: stashlock.config.json not found at {configPath}");
-            Console.WriteLine("Run 'stashlock init' first to create the configuration.");
+            Console.Error.WriteLine($"Error: stashlock.config.json not found at {configPath}");
+            Console.Error.WriteLine("Run 'stashlock init' first to create the configuration.");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         var configJson = File.ReadAllText(configPath);
@@ -95,38 +96,38 @@ internal class GenerateCommands
         if (config == null)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Error: Failed to parse stashlock.config.json");
+            Console.Error.WriteLine("Error: Failed to parse stashlock.config.json");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         if (string.IsNullOrWhiteSpace(config.Name))
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Error: 'Name' is required in stashlock.config.json but is empty.");
-            Console.WriteLine("Run 'stashlock init' again or set the \"Name\" field manually.");
+            Console.Error.WriteLine("Error: 'Name' is required in stashlock.config.json but is empty.");
+            Console.Error.WriteLine("Run 'stashlock init' again or set the \"Name\" field manually.");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         var keyFiles = FindKeyFiles(secretsDir);
         if (keyFiles.Count == 0)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error: No key files (stashlock.key.*.json) found in {secretsDir}");
-            Console.WriteLine("Run 'stashlock key' to generate key files.");
+            Console.Error.WriteLine($"Error: No key files (stashlock.key.*.json) found in {secretsDir}");
+            Console.Error.WriteLine("Run 'stashlock key' to generate key files.");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         if (verbose)
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"  Config:     {configPath}");
-            Console.WriteLine($"  Vault:      {config.Name}");
-            Console.WriteLine($"  Version:    {config.Version}");
-            Console.WriteLine($"  Mode:       {config.EncryptionMode ?? "sops"}");
-            Console.WriteLine($"  Key files:  {keyFiles.Count} ({string.Join(", ", keyFiles.Keys)})");
+            Console.Error.WriteLine($"  Config:     {configPath}");
+            Console.Error.WriteLine($"  Vault:      {config.Name}");
+            Console.Error.WriteLine($"  Version:    {config.Version}");
+            Console.Error.WriteLine($"  Mode:       {config.EncryptionMode ?? "sops"}");
+            Console.Error.WriteLine($"  Key files:  {keyFiles.Count} ({string.Join(", ", keyFiles.Keys)})");
             Console.ResetColor();
             Console.WriteLine();
         }
@@ -169,7 +170,7 @@ internal class GenerateCommands
 
         Console.WriteLine();
         Console.WriteLine($"Generate complete: {generated} encrypted file(s) created (mode: {mode}).");
-        return Task.CompletedTask;
+        return Task.FromResult(ExitCodes.Ok);
     }
 
     private static string GenerateSopsMode(

@@ -1,0 +1,68 @@
+name: CI
+
+# Pull requests run it directly; pushes to main/production run it through the
+# publish workflows (docker-build-go.yml, nuget-publish.yml), which wait for it.
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go server (vet + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/StashLock.Server
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: src/StashLock.Server/go.mod
+          cache-dependency-path: src/StashLock.Server/go.sum
+      - name: go vet
+        run: go vet ./...
+      - name: go test -race
+        run: go test -race ./...
+
+  dotnet:
+    name: .NET client + CLI (tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test
+        run: dotnet test src/StashLock.Tests/StashLock.Tests.csproj --configuration Release
+
+  contract:
+    name: Contract (.NET client/CLI against Go server)
+    runs-on: ubuntu-latest
+    env:
+      STASHLOCK_TEST_SERVER_URL: http://127.0.0.1:18080
+      STASHLOCK_TEST_MASTER_KEY: ci-contract-master-key-0123456789abcdef
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: src/StashLock.Server/go.mod
+          cache-dependency-path: src/StashLock.Server/go.sum
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Start server
+        working-directory: src/StashLock.Server
+        run: |
+          go build -o "$RUNNER_TEMP/stashlock-server" .
+          STASHLOCK_PORT=18080 STASHLOCK_WORK_DIR="$RUNNER_TEMP/work" STASHLOCK_LOG_DIR="$RUNNER_TEMP/log" \
+          STASHLOCK_MASTER_KEY="$STASHLOCK_TEST_MASTER_KEY" "$RUNNER_TEMP/stashlock-server" > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:18080/healthz && exit 0; sleep 1; done
+          cat "$RUNNER_TEMP/server.log"; exit 1
+      - name: Contract tests
+        run: dotnet test src/StashLock.Tests/StashLock.Tests.csproj --configuration Release --filter "FullyQualifiedName~Contract" --logger "console;verbosity=normal"
+      - name: Server log
+        if: always()
+        run: cat "$RUNNER_TEMP/server.log" || true

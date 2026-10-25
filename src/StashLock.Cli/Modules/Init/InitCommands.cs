@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Models;
 using Deneblab.StashLock.Cli.Modules.Ecies;
@@ -34,7 +35,7 @@ internal class InitCommands
     /// <param name="url">Server URL to store in config for publish command</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
-    public Task Root(
+    public Task<int> Root(
         [Argument] string dir,
         string tags = "",
         string url = "",
@@ -56,12 +57,12 @@ internal class InitCommands
         if (File.Exists(configPath))
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"Warning: stashlock.config.json already exists at {configPath}");
-            Console.WriteLine($"Skipping — to reinitialize, delete the file first:");
-            Console.WriteLine($"  del \"{configPath}\"");
+            Console.Error.WriteLine($"Warning: stashlock.config.json already exists at {configPath}");
+            Console.Error.WriteLine($"Skipping — to reinitialize, delete the file first:");
+            Console.Error.WriteLine($"  del \"{configPath}\"");
             Console.ResetColor();
             _log.LogWarning("Config already exists at {Path}, skipping", configPath);
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         var tagList = new System.Collections.Generic.List<string>();
@@ -116,7 +117,7 @@ internal class InitCommands
                 if (File.Exists(keyFilePath))
                 {
                     Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine($"Skipping {tag}: key file already exists");
+                    Console.Error.WriteLine($"Skipping {tag}: key file already exists");
                     Console.ResetColor();
                     continue;
                 }
@@ -137,7 +138,7 @@ internal class InitCommands
                 if (GitIgnore.EnsureKeyFilesIgnored(targetDir))
                     Console.WriteLine($"Updated .gitignore: {GitIgnore.KeyFilePattern}");
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("WARNING: Keep key files secure. Do NOT commit them to version control.");
+                Console.Error.WriteLine("WARNING: Keep key files secure. Do NOT commit them to version control.");
                 Console.ResetColor();
             }
 
@@ -150,6 +151,6 @@ internal class InitCommands
             Console.WriteLine("No tags defined. Edit stashlock.config.json to add tags, then run 'stashlock keygen'.");
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(ExitCodes.Ok);
     }
 }

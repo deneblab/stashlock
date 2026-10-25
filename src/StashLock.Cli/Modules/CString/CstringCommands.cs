@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Models;
 using Deneblab.StashLock.Cli.Modules.Ecies;
@@ -48,7 +49,7 @@ internal class CstringCommands
     /// <param name="env">Print only the environment variable assignment</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
-    public Task Root(
+    public Task<int> Root(
         [Argument] string dir,
         string tag = "",
         string apiKey = "",
@@ -63,7 +64,7 @@ internal class CstringCommands
         if (!Directory.Exists(targetDir))
         {
             PrintError($"Error: Directory not found: {targetDir}");
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         // 1. Load stashlock.config.json
@@ -71,7 +72,7 @@ internal class CstringCommands
         if (!File.Exists(configPath))
         {
             PrintError($"Error: stashlock.config.json not found in {targetDir}");
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         StashlockConfig config;
@@ -83,23 +84,23 @@ internal class CstringCommands
         catch (Exception ex)
         {
             PrintError($"Error reading config: {ex.Message}");
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         if (config == null)
         {
             PrintError("Error: Failed to parse stashlock.config.json");
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         // 2. Display vault info
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"  Vault directory: {targetDir}");
-        Console.WriteLine($"  Server URL: {config.ServerUrl}");
+        Console.Error.WriteLine($"  Vault directory: {targetDir}");
+        Console.Error.WriteLine($"  Server URL: {config.ServerUrl}");
         var resolvedApiKey = ServerSettings.ResolveApiKey(apiKey);
-        Console.WriteLine($"  API Key: {(resolvedApiKey == null ? $"(none — use --api-key or {ServerSettings.ApiKeyEnvVar})" : Mask(resolvedApiKey))}");
+        Console.Error.WriteLine($"  API Key: {(resolvedApiKey == null ? $"(none — use --api-key or {ServerSettings.ApiKeyEnvVar})" : Mask(resolvedApiKey))}");
         Console.ResetColor();
-        Console.WriteLine();
+        Console.Error.WriteLine();
 
         // 3. Resolve tag
         var selectedTag = tag;
@@ -107,7 +108,7 @@ internal class CstringCommands
         {
             selectedTag = PromptForTag(config.Tags, targetDir);
             if (selectedTag == null)
-                return Task.CompletedTask;
+                return Task.FromResult(ExitCodes.Error);
         }
 
         // 4. Find key file for tag
@@ -115,7 +116,7 @@ internal class CstringCommands
         if (!File.Exists(keyFilePath))
         {
             PrintError($"Error: Key file not found: stashlock.key.{selectedTag}.json");
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         KeyPairModel keyPair;
@@ -127,13 +128,13 @@ internal class CstringCommands
         catch (Exception ex)
         {
             PrintError($"Error reading key file: {ex.Message}");
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         if (keyPair == null || string.IsNullOrEmpty(keyPair.PrivateKey))
         {
             PrintError($"Error: Invalid key file for tag '{selectedTag}'");
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         // 5. Build connection string
@@ -146,13 +147,13 @@ internal class CstringCommands
             var isWindows = Environment.OSVersion.Platform == PlatformID.Win32NT;
             var prefix = isWindows ? "set" : "export";
             Console.WriteLine($"{prefix} STASHLOCK_CONNECTION_STRING=\"{plainCs}\"");
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Ok);
         }
 
         if (base64)
         {
             Console.WriteLine(base64Cs);
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Ok);
         }
 
         // Default: show both
@@ -188,7 +189,7 @@ internal class CstringCommands
         // Try clipboard
         TryCopyToClipboard(plainCs);
 
-        return Task.CompletedTask;
+        return Task.FromResult(ExitCodes.Ok);
     }
 
     private static string BuildConnectionString(StashlockConfig config, string? apiKey, string tag, string privateKey)
@@ -234,13 +235,13 @@ internal class CstringCommands
         if (tagList.Count == 1)
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"  Tag: {tagList[0]} (only one available)");
+            Console.Error.WriteLine($"  Tag: {tagList[0]} (only one available)");
             Console.ResetColor();
             return tagList[0];
         }
 
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("  Available tags:");
+        Console.Error.WriteLine("  Available tags:");
         Console.ResetColor();
         for (var i = 0; i < tagList.Count; i++)
         {
@@ -308,7 +309,7 @@ internal class CstringCommands
     private static void PrintError(string message)
     {
         Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine(message);
+        Console.Error.WriteLine(message);
         Console.ResetColor();
     }
 }

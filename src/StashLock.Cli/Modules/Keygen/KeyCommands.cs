@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Models;
 using Deneblab.StashLock.Cli.Modules.Ecies;
@@ -30,7 +31,7 @@ internal class KeyCommands
     /// <param name="dir">Directory containing stashlock.config.json</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
-    public Task Root(
+    public Task<int> Root(
         [Argument] string dir,
         CancellationToken cancellationToken = default)
     {
@@ -42,11 +43,11 @@ internal class KeyCommands
         if (!File.Exists(configPath))
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error: stashlock.config.json not found at {configPath}");
-            Console.WriteLine("Run 'stashlock init' first to create the configuration.");
+            Console.Error.WriteLine($"Error: stashlock.config.json not found at {configPath}");
+            Console.Error.WriteLine("Run 'stashlock init' first to create the configuration.");
             Console.ResetColor();
             _log.LogError("Config not found at {Path}", configPath);
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         var configJson = File.ReadAllText(configPath);
@@ -59,19 +60,19 @@ internal class KeyCommands
         if (config == null)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"Error: Failed to parse stashlock.config.json at {configPath}");
+            Console.Error.WriteLine($"Error: Failed to parse stashlock.config.json at {configPath}");
             Console.ResetColor();
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         if (config.Tags == null || config.Tags.Count == 0)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("No tags defined in stashlock.config.json.");
-            Console.WriteLine("Run 'stashlock init /path -tags production,develop' to define tags.");
+            Console.Error.WriteLine("No tags defined in stashlock.config.json.");
+            Console.Error.WriteLine("Run 'stashlock init /path -tags production,develop' to define tags.");
             Console.ResetColor();
             _log.LogWarning("No tags defined in config at {Path}", configPath);
-            return Task.CompletedTask;
+            return Task.FromResult(ExitCodes.Error);
         }
 
         _log.LogInformation("Generating key files for {Count} tags in {Dir}", config.Tags.Count, targetDir);
@@ -90,7 +91,7 @@ internal class KeyCommands
             if (File.Exists(keyFilePath))
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"Skipping {tag}: key file already exists at {keyFilePath}");
+                Console.Error.WriteLine($"Skipping {tag}: key file already exists at {keyFilePath}");
                 Console.ResetColor();
                 _log.LogWarning("Key file already exists for tag {Tag} at {Path}", tag, keyFilePath);
                 skipped++;
@@ -115,10 +116,10 @@ internal class KeyCommands
             if (GitIgnore.EnsureKeyFilesIgnored(targetDir))
                 Console.WriteLine($"Updated .gitignore: {GitIgnore.KeyFilePattern}");
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("WARNING: Keep key files secure. Do NOT commit them to version control.");
+            Console.Error.WriteLine("WARNING: Keep key files secure. Do NOT commit them to version control.");
             Console.ResetColor();
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(ExitCodes.Ok);
     }
 }

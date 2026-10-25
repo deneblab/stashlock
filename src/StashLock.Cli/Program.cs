@@ -20,15 +20,18 @@ namespace Deneblab.StashLock.Cli;
 
 internal class Program
 {
-    private static async Task Main(string[] args)
+    private static async Task<int> Main(string[] args)
     {
         using var runner = new Runner();
         await runner.Run(args);
+        return Environment.ExitCode;
     }
 }
 
 internal sealed class Runner : SimpleRunner, IDisposable
 {
+    private static readonly string[] Commands = ["init", "keygen", "encode", "cstring", "decode", "publish"];
+
     private readonly SimpleVersionInfo _appVersion;
     private readonly SimpleEnvResult _env;
     private readonly ILoggerFactory _factory;
@@ -58,6 +61,13 @@ internal sealed class Runner : SimpleRunner, IDisposable
         {
             var shouldContinue = StartupCheck(args, _appVersion);
             if (!shouldContinue) return;
+
+            if (args.Length > 0 && !args[0].StartsWith('-') && Array.IndexOf(Commands, args[0]) < 0)
+            {
+                Console.Error.WriteLine($"Error: Unknown command '{args[0]}'. Commands: {string.Join(", ", Commands)}. Run 'stashlock --help' for details.");
+                Environment.ExitCode = Common.ExitCodes.Error;
+                return;
+            }
 
             var reg = new Registry(_env, _appVersion);
 
@@ -99,9 +109,14 @@ internal sealed class Runner : SimpleRunner, IDisposable
             app.Add<PublishCommands>("publish");
 
             await app.RunAsync(args);
+
+            // Every command needs a path argument; "stashlock publish" alone only prints usage
+            if (args.Length == 1 && Array.IndexOf(Commands, args[0]) >= 0)
+                Environment.ExitCode = Common.ExitCodes.Error;
         }
         catch (Exception e)
         {
+            Environment.ExitCode = Common.ExitCodes.Error;
             Console.Error.WriteLine($"Error: {e.Message}");
             LogCritical(_env, _appVersion, "stashlock-cli", e);
         }

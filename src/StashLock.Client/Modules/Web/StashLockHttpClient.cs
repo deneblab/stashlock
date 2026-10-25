@@ -72,9 +72,11 @@ public class StashLockHttpClient : IDisposable
             if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
             {
                 _log.LogWarning("HTTP GET {Path} -> {StatusCode} ({ElapsedMs}ms)", $"/boxes/{key}", (int)response.StatusCode, sw.ElapsedMilliseconds);
-                throw new StashLockException(
-                    $"Access denied ({(int)response.StatusCode}) for key '{DescribeKey(key)}'. Use an API key created for this box.tag (STASHLOCK_API_KEY); master keys cannot read secrets.",
-                    new HttpRequestException(response.ReasonPhrase, null, response.StatusCode));
+                var described = DescribeKey(key);
+                throw new VaultAccessDeniedException(described, response.StatusCode,
+                    response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                        ? $"The server rejected the API key (401) for '{described}'. Check STASHLOCK_API_KEY: the key may be wrong, revoked or expired."
+                        : $"The API key is not allowed to read '{described}' (403). Use an API key created for this box.tag with Read access; admin keys cannot read secrets.");
             }
 
             response.EnsureSuccessStatusCode();

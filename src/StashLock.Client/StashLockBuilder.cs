@@ -240,10 +240,10 @@ public class StashLockBuilder
     /// </summary>
     public async Task<ISecretsStore> OpenAsync(CancellationToken cancellationToken = default)
     {
-        ApplyConnectionStringDefaults();
+        var log = (LoggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Deneblab.StashLock.Client");
+        ApplyConnectionStringDefaults(log);
 
         var effectiveTimeout = ResolveTimeout();
-        var log = (LoggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Deneblab.StashLock.Client");
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         log.LogInformation(
@@ -262,7 +262,7 @@ public class StashLockBuilder
                 case SourceMode.Box:
                     if (CacheOpts != null)
                         result = await SecretsStore.OpenRemoteSealedWithCacheAsync(
-                            Box, Tag, Version, CacheOpts, PrivateKeyBase64, ApiUrl, ApiKey, cancellationToken, LoggerFactory);
+                            Box, Tag, Version, CacheOpts, PrivateKeyBase64, ApiUrl, ApiKey, token, LoggerFactory);
                     else
                         result = await SecretsStore.OpenRemoteSealedAsync(
                             Box, Tag, Version, PrivateKeyBase64, ApiUrl, ApiKey, token, LoggerFactory);
@@ -313,7 +313,7 @@ public class StashLockBuilder
     /// Silently reads STASHLOCK_CONNECTION_STRING env var and applies values
     /// as defaults — only fills fields that are still null/unset.
     /// </summary>
-    private void ApplyConnectionStringDefaults()
+    private void ApplyConnectionStringDefaults(ILogger log)
     {
         var cs = System.Environment.GetEnvironmentVariable("STASHLOCK_CONNECTION_STRING");
         if (string.IsNullOrWhiteSpace(cs))
@@ -324,9 +324,11 @@ public class StashLockBuilder
         {
             parsed = ConnectionStringParser.Parse(cs);
         }
-        catch
+        catch (Exception ex)
         {
-            return; // invalid CS in env — silently skip, don't break existing flows
+            // Invalid CS in env: keep going with explicit settings, but say why it was ignored
+            log.LogWarning("Ignoring STASHLOCK_CONNECTION_STRING: {Reason}", ex.Message);
+            return;
         }
 
         if (ApiUrl == null && parsed.TryGetValue("Url", out var url))

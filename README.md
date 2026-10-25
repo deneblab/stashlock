@@ -425,15 +425,35 @@ dotnet build
 ### Running Tests
 
 ```bash
+# Go server
+cd src/StashLock.Server && go vet ./... && go test -race ./...
+
+# .NET client and CLI (requires the .NET 10 SDK)
 dotnet test src/StashLock.Tests
 ```
 
+**Contract tests** run the .NET CLI and client against a real Go server. They need a fresh server, because the master key works only once:
+
+```bash
+cd src/StashLock.Server && go build -o /tmp/stashlock-server .
+STASHLOCK_MASTER_KEY=local-contract-master-key-0123456789 STASHLOCK_PORT=18080 \
+  STASHLOCK_WORK_DIR=$(mktemp -d) /tmp/stashlock-server &
+cd ../.. && STASHLOCK_TEST_SERVER_URL=http://127.0.0.1:18080 \
+  STASHLOCK_TEST_MASTER_KEY=local-contract-master-key-0123456789 \
+  dotnet test src/StashLock.Tests --filter "FullyQualifiedName~Contract"
+```
+
+Without those two variables the contract tests return immediately.
+
 ## CI/CD
 
-The project includes GitHub Actions workflows for:
-- **Docker**: Building and publishing server images to GitHub Container Registry
-- **NuGet**: Publishing CLI tool and Client library to NuGet.org
-- **Versioning**: Automatic version management with `Deneblab.AbcVersion`
+GitHub Actions workflows:
+- **CI** (`ci.yml`): on every pull request — `go vet` + `go test -race`, `dotnet test`, and the contract tests against a freshly started server.
+- **Docker** (`docker-build-go.yml`): runs CI first, then builds and publishes the server image to GitHub Container Registry.
+- **NuGet** (`nuget-publish.yml`): runs CI first, then publishes the CLI tool and Client library to NuGet.org.
+- **Versioning**: automatic version management with `Deneblab.AbcVersionCmd` (pinned version).
+
+Third-party actions are pinned to commit SHAs.
 
 ### Published Packages
 
