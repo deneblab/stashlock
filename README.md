@@ -1,5 +1,11 @@
 # StashLock
 
+[![NuGet CLI](https://img.shields.io/nuget/v/Deneblab.StashLock.Cli?label=Deneblab.StashLock.Cli&logo=nuget)](https://www.nuget.org/packages/Deneblab.StashLock.Cli)
+[![NuGet Client](https://img.shields.io/nuget/v/Deneblab.StashLock.Client?label=Deneblab.StashLock.Client&logo=nuget)](https://www.nuget.org/packages/Deneblab.StashLock.Client)
+[![Server image](https://img.shields.io/badge/ghcr.io-stashlock--server-blue?logo=docker)](https://github.com/deneblab/stashlock/pkgs/container/stashlock-server)
+[![Server build](https://github.com/deneblab/stashlock/actions/workflows/docker-build-go.yml/badge.svg?branch=production)](https://github.com/deneblab/stashlock/actions/workflows/docker-build-go.yml)
+[![NuGet build](https://github.com/deneblab/stashlock/actions/workflows/nuget-publish.yml/badge.svg?branch=production)](https://github.com/deneblab/stashlock/actions/workflows/nuget-publish.yml)
+
 A secure, lightweight key-value storage system (secrets vault) with a REST API, .NET client library, and command-line interface.
 
 ## Documentation
