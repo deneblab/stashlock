@@ -5,38 +5,11 @@ Versions follow [Semantic Versioning](https://semver.org/); while the major vers
 
 ## [0.5.0] — 2026-10-25
 
-A security redesign: new access model, hardened server, new dashboard, SOPS v2 file format. **This release breaks compatibility with 0.4.14 and earlier** — read [Upgrading from 0.4](#upgrading-from-04) before deploying.
+A security redesign: new access model, hardened server, new dashboard, SOPS v2 file format.
 
-> Builds published after 0.4.14 (NuGet 0.4.17 and the server images built on 2026-10-25) came automatically from intermediate commits and already contain part of these changes (access model, hardening, CI). Treat them as pre-releases of 0.5.0 and upgrade straight to 0.5.0.
+**0.5.0 is a fresh start.** There is no upgrade path from 0.4: deploy a new server with an empty database and set up vaults, keys and API keys as described in [GETTING_STARTED.md](GETTING_STARTED.md) and [docs/docker-compose.md](docs/docker-compose.md). Builds published after 0.4.14 (NuGet 0.4.17 and the server images built on 2026-10-25) were intermediate builds of this release; replace them with 0.5.0.
 
-### Upgrading from 0.4
-
-Do these steps in this order.
-
-1. **Back up** `./app/work/db/` (see [docs/docker-compose.md](docs/docker-compose.md#backup)).
-2. **Start from a fresh database if you come from 0.4.14 or earlier.** The old `ApiKeys.Scopes` schema cannot be upgraded; the server refuses to start on it with a clear message. Move `./app/work/db/` away and re-publish your secrets after step 6. (Databases created by those intermediate builds are upgraded automatically.)
-3. **Give the data folders to the container user**: the image now runs as uid `10001`.
-   ```bash
-   sudo chown -R 10001:10001 app/work app/log
-   ```
-4. **Update your compose file**:
-   - replace `StashLock__ApiKey` / `STASHLOCK_API_KEY` with a one-time `STASHLOCK_MASTER_KEY` (≥ 32 characters, e.g. `openssl rand -base64 32`);
-   - replace a `curl` health check with `["CMD", "/app/stashlock-servergo", "healthcheck"]` or remove it (the image has one; `curl` is no longer installed);
-   - behind a reverse proxy that is used for the `/admin` IP allowlist, set `STASHLOCK_TRUSTED_PROXIES`;
-   - set `STASHLOCK_ALLOWED_ORIGINS` only if a browser calls the API cross-origin (CORS is now off by default).
-   See [docs/docker-compose.md](docs/docker-compose.md) for complete examples (including Traefik).
-5. **Sign in once** at `/admin` with the master key and save the admin key it shows (`slk_adm_…`). The master key is then blocked.
-6. **Create API keys per `box.tag`** in the dashboard (Read + Write for CI, Read for applications) and set them as `STASHLOCK_API_KEY`. Admin keys cannot read secrets.
-7. **Update applications** to `Deneblab.StashLock.Client` 0.5.0 **before** re-encoding: older clients cannot read SOPS v2 files.
-8. **Update the CLI** (`dotnet tool update -g Deneblab.StashLock.Cli`; needs the .NET 10 runtime), then re-encode and publish:
-   ```bash
-   stashlock encode ./vault/secrets.json
-   STASHLOCK_API_KEY=slk_… stashlock publish ./vault/stashlock.enc.production.secrets.json --url https://vault.example.com
-   ```
-   While some applications still run an older client, use `stashlock encode --format 1`.
-9. **Remove `ApiKey` from `stashlock.config.json`** if you had one; the CLI now reads the API key only from `--api-key` or `STASHLOCK_API_KEY`.
-
-### Breaking changes
+### Breaking changes (compared with 0.4)
 
 - **Access model**: the server no longer reads `STASHLOCK_API_KEY` and has no open access mode. A one-time `STASHLOCK_MASTER_KEY` is exchanged for admin keys at the first dashboard sign-in; API keys are bound to one `box.tag` (replaces scopes). Admin keys cannot use `/boxes`; the master key is never accepted by the API.
 - **`POST /boxes/decode` removed** (it sent the private key to the server). Decrypt with `stashlock decode` or the client library.

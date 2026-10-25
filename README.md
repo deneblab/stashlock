@@ -35,7 +35,7 @@ A secure, lightweight key-value storage system (secrets vault) with a REST API, 
 | Use the CLI | [src/StashLock.Cli/README.md](src/StashLock.Cli/README.md) |
 | Read secrets from .NET | [src/StashLock.Client/README.md](src/StashLock.Client/README.md) |
 | Call the REST API | [API Documentation](#api-documentation) below |
-| Upgrade from an earlier version | [CHANGELOG.md](CHANGELOG.md) — breaking changes and upgrade steps |
+| See what changed | [CHANGELOG.md](CHANGELOG.md) |
 
 ## Components
 

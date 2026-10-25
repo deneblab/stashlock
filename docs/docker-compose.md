@@ -32,8 +32,6 @@ mkdir -p app/work app/log
 sudo chown -R 10001:10001 app/work app/log
 ```
 
-Upgrading from an image that ran as root? Run the same `chown` on the existing folders before starting the new image, or the server cannot open its database.
-
 Put the one-time master key in a `.env` file next to `docker-compose.yml`:
 
 ```bash
@@ -194,7 +192,7 @@ Find the subnet with `docker network inspect traefik --format '{{(index .IPAM.Co
 
 ## Upgrades and shutdown
 
-The database schema is versioned: a new image migrates the database on start (no manual steps, no data loss). Databases created before SL-061 cannot be upgraded; move `./app/work/db/` away to start fresh.
+The database schema is versioned: a new image migrates the database on start (no manual steps, no data loss). Databases from 0.4 are not supported; 0.5.0 starts with an empty database.
 
 `docker stop` lets in-flight requests finish (up to 15 s) before the server exits.
 
