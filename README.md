@@ -339,6 +339,8 @@ Application logs are written using zerolog with:
 
 ## Docker Deployment
 
+Ready-to-use compose examples (minimal, Tailscale-only dashboard, behind Traefik), image tags and backup notes: [docs/docker-compose.md](docs/docker-compose.md).
+
 ### Using docker-compose
 
 The provided `docker-compose.yml` pulls the image from GitHub Container Registry and includes:
