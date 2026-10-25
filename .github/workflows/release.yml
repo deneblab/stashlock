@@ -1,0 +1,94 @@
+name: Release
+
+# Creates the tag v<version> and a GitHub release for the first published version of a new
+# major.minor (after a version bump with abcversion). Later patch versions only publish packages.
+# Runs after the publish workflows; the release is created once every publish run of the commit
+# has succeeded (the Docker workflow runs only when the server changed).
+
+on:
+  workflow_run:
+    workflows: ["NuGet Publish", "Docker Build and Publish (Go Server)"]
+    types: [completed]
+    branches: [production]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 0
+
+      # Same state as the publish workflows (branch production at the published commit), so abcversion gives the same version
+      - name: Check out the published commit
+        run: git checkout -B production "$SHA"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install abcversion tool
+        run: dotnet tool install --global Deneblab.AbcVersionCmd --version 1.2.19
+
+      - name: Decide
+        id: decide
+        run: |
+          VERSION=$(abcversion -p semversion)
+          MINOR="${VERSION%.*}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+          if [ -n "$(git tag -l "v${MINOR}.*")" ]; then
+            echo "A v${MINOR}.* tag exists: patch release, nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          RUNS=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SHA}&event=push&per_page=50" \
+            --jq '.workflow_runs[] | select(.name == "NuGet Publish" or .name == "Docker Build and Publish (Go Server)") | "\(.name)|\(.status)|\(.conclusion)"')
+          echo "$RUNS"
+          if ! echo "$RUNS" | grep -q '^NuGet Publish|completed|success$'; then
+            echo "NuGet Publish has not succeeded for $SHA yet."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$RUNS" | grep -v '|completed|success$' | grep -q .; then
+            echo "Another publish run for $SHA is still running or failed; its completion decides."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$RUNS" | grep -q '^Docker Build and Publish (Go Server)|'; then
+            echo "image=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and release
+        if: steps.decide.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.decide.outputs.version }}
+          IMAGE: ${{ steps.decide.outputs.image }}
+        run: |
+          {
+            echo "NuGet: [Deneblab.StashLock.Cli](https://www.nuget.org/packages/Deneblab.StashLock.Cli/${VERSION}) and [Deneblab.StashLock.Client](https://www.nuget.org/packages/Deneblab.StashLock.Client/${VERSION}) ${VERSION}"
+            if [ "$IMAGE" = "true" ]; then
+              echo "Docker: \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/stashlock-server:${VERSION}\`"
+            else
+              echo "Docker: server unchanged in this commit, use the latest \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/stashlock-server\` image"
+            fi
+          } > notes.md
+          gh release create "v${VERSION}" --target "$SHA" --title "v${VERSION}" --notes-file notes.md --generate-notes
