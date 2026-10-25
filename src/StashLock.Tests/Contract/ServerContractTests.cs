@@ -73,7 +73,7 @@ public class ServerContractTests : IDisposable
         await new InitCommands(NullLogger<InitCommands>.Instance).Root(vault, "dev");
         File.WriteAllText(Path.Combine(vault, "secrets.json"), $"{{\"Db\":\"{value}\",\"Nested\":{{\"Port\":\"5432\"}}}}");
         await new GenerateCommands(NullLogger<GenerateCommands>.Instance).Root(Path.Combine(vault, "secrets.json"));
-        var box = JsonDocument.Parse(File.ReadAllText(Path.Combine(vault, "stashlock.config.json"))).RootElement.GetProperty("Name").GetString()!;
+        var box = VaultConfig.Load(vault)!.Name;
         var key = JsonDocument.Parse(File.ReadAllText(Path.Combine(vault, "stashlock.key.dev.json"))).RootElement.GetProperty("PrivateKey").GetString()!;
         return (box, key, Path.Combine(vault, "stashlock.enc.dev.secrets.json"));
     }

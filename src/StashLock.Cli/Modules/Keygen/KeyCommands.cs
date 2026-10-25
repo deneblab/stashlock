@@ -39,7 +39,7 @@ internal class KeyCommands
             ? dir
             : Path.GetFullPath(dir);
 
-        var configPath = Path.Combine(targetDir, "stashlock.config.json");
+        var configPath = VaultConfig.PathIn(targetDir);
         if (!File.Exists(configPath))
         {
             Console.ForegroundColor = ConsoleColor.Red;
@@ -50,17 +50,15 @@ internal class KeyCommands
             return Task.FromResult(ExitCodes.Error);
         }
 
-        var configJson = File.ReadAllText(configPath);
-        var readOptions = new JsonSerializerOptions
+        StashlockConfig config;
+        try
         {
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
-        };
-        var config = JsonSerializer.Deserialize<StashlockConfig>(configJson, readOptions);
-        if (config == null)
+            config = VaultConfig.Load(targetDir)!;
+        }
+        catch (JsonException ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.Error.WriteLine($"Error: Failed to parse stashlock.config.json at {configPath}");
+            Console.Error.WriteLine($"Error: Failed to parse stashlock.config.json at {configPath}: {ex.Message}");
             Console.ResetColor();
             return Task.FromResult(ExitCodes.Error);
         }

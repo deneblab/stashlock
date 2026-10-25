@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Modules.Init;
@@ -15,8 +14,7 @@ public class InitNameTests : System.IDisposable
 
     public void Dispose() => Directory.Delete(_dir, true);
 
-    private static string ConfigName(string vault) =>
-        JsonDocument.Parse(File.ReadAllText(Path.Combine(vault, "stashlock.config.json"))).RootElement.GetProperty("Name").GetString()!;
+    private static string ConfigName(string vault) => VaultConfig.Load(vault)!.Name;
 
     [Fact]
     public async Task Name_ComesFromTargetDirectory_NotCurrentDirectory()

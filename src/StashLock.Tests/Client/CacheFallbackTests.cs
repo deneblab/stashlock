@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Modules.Encode;
 using Deneblab.StashLock.Cli.Modules.Init;
 using Deneblab.StashLock.Client;
@@ -30,7 +31,7 @@ public class CacheFallbackTests : IDisposable
         File.WriteAllText(Path.Combine(vault, "secrets.json"), "{\"Db\":\"secret-1\"}");
         await new GenerateCommands(NullLogger<GenerateCommands>.Instance).Root(Path.Combine(vault, "secrets.json"));
         _encrypted = File.ReadAllText(Path.Combine(vault, "stashlock.enc.dev.secrets.json"));
-        var box = JsonDocument.Parse(File.ReadAllText(Path.Combine(vault, "stashlock.config.json"))).RootElement.GetProperty("Name").GetString()!;
+        var box = VaultConfig.Load(vault)!.Name;
         var key = JsonDocument.Parse(File.ReadAllText(Path.Combine(vault, "stashlock.key.dev.json"))).RootElement.GetProperty("PrivateKey").GetString()!;
         return (box, key);
     }

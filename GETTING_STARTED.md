@@ -97,14 +97,16 @@ Without `--name` the vault is named after its directory (`my-vault` → `my-vaul
 
 ### 3. Check the vault name
 
-`my-vault/stashlock.config.json` now contains:
+`my-vault/stashlock.config.json` now contains (JSON with comments; each setting is described in the file, optional ones are commented out):
 
-```json
+```jsonc
 {
-  "Version": "00001",
+  // Box name on the server. ...
   "Name": "myapp",
   "Tags": ["production", "develop"],
-  "ServerUrl": "http://localhost:8099"
+  "Version": "00001",
+  "ServerUrl": "http://localhost:8099",
+  // "Skeleton": { ... }   // optional, see the CLI README
 }
 ```
 
@@ -187,6 +189,7 @@ stashlock decode ./my-vault/stashlock.enc.production.secrets.json
 | `stashlock.config.json` | Yes |
 | `secrets.json` (plaintext) | **No** — add to `.gitignore` |
 | `stashlock.enc.*.json` (encrypted) | Yes — safe to commit |
+| `stashlock.skeleton.*.json` (key names only, optional) | Yes — safe to commit |
 | `stashlock.key.*.json` (key pairs) | **No** — share securely, never commit |
 
 `stashlock init` already added `stashlock.key.*.json` to `.gitignore`. Add the plaintext file yourself:

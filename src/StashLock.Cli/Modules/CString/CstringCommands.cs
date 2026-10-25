@@ -68,7 +68,7 @@ internal class CstringCommands
         }
 
         // 1. Load stashlock.config.json
-        var configPath = Path.Combine(targetDir, "stashlock.config.json");
+        var configPath = VaultConfig.PathIn(targetDir);
         if (!File.Exists(configPath))
         {
             PrintError($"Error: stashlock.config.json not found in {targetDir}");
@@ -78,8 +78,7 @@ internal class CstringCommands
         StashlockConfig? config;
         try
         {
-            var configJson = File.ReadAllText(configPath);
-            config = JsonSerializer.Deserialize<StashlockConfig>(configJson, ReadOptions);
+            config = VaultConfig.Load(targetDir);
         }
         catch (Exception ex)
         {

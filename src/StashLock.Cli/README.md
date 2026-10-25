@@ -19,6 +19,37 @@ stashlock init ./my-vault --name myapp --tags production,develop --url https://v
 
 Creates a `stashlock.config.json` with the specified environment tags, generates key files for each tag (file mode 0600) and adds `stashlock.key.*.json` to `.gitignore`. The vault name (the `box` in `box.tag.version`) is `--name`, or the target directory's name. Options: `--tags`/`-t`, `--name`, `--url`.
 
+The config is JSON with comments and lists every setting with a short description; optional ones are commented out:
+
+```jsonc
+// StashLock vault configuration (JSON with comments).
+// Commit this file; never commit stashlock.key.*.json (private keys).
+{
+  // Box name on the server. With a tag and the version it forms the vault key <Name>.<tag>.<Version>.
+  "Name": "exampleapp",
+
+  // Environment tags. `stashlock keygen` creates stashlock.key.<tag>.json for each one;
+  // `stashlock encode` encrypts for every tag whose key file is in this directory.
+  "Tags": ["develop", "production"],
+
+  // Version part of the vault key (five digits). Raise it to publish a new entry
+  // (e.g. a breaking change of the secrets) without overwriting the current one.
+  "Version": "00001",
+
+  // Server for `stashlock publish` and `stashlock cstring`; --url and STASHLOCK_API_URL take precedence.
+  // API keys never go into this file: use --api-key or STASHLOCK_API_KEY.
+  // "ServerUrl": "https://vault.example.com",
+
+  // Public skeleton of the secrets. When this section is present, `stashlock encode <FILE>.json`
+  // also writes stashlock.skeleton.<FILE>.json: the key names of every tag, each value replaced
+  // by "text". It holds no values, so it is safe to commit (e.g. as context for people and LLMs).
+  // "Skeleton": {
+  //   // Keys left out of the skeleton, e.g. "Customers:*" ('*' matches anything, case-insensitive)
+  //   "Exclude": []
+  // }
+}
+```
+
 ### 2. Generate key pairs
 
 ```bash
@@ -34,6 +65,27 @@ stashlock encode ./my-vault/secrets.json
 ```
 
 Reads a plaintext JSON secrets file and writes one encrypted file per tag (`stashlock.enc.{tag}.secrets.json`). Every value is encrypted separately and the file carries a MAC (`"mode": "sops"`, see [Encryption Details](#encryption-details)). Key names stay readable, so diffs show which secrets changed.
+
+#### Skeleton (optional)
+
+With the `Skeleton` section uncommented in `stashlock.config.json`, `encode` also writes `stashlock.skeleton.<FILE>.json` (`secrets.json` → `stashlock.skeleton.secrets.json`): the secrets' structure with every value replaced by `"text"`.
+
+```json
+{
+  "ApiToken": "text",
+  "Database": {
+    "Password": "text",
+    "Port": "text"
+  }
+}
+```
+
+Commit it to show people and LLMs which secrets the application expects, without giving access to them.
+
+- Built from the key names of every `stashlock.enc.<tag>.<FILE>.json` in the vault (key names are not encrypted), so it also covers tags whose key file is not on this machine. A key removed from all tags disappears on the next `encode`.
+- No values, value lengths or hashes; keys are sorted; `Hosts:0`, `Hosts:1` become an array.
+- `Exclude` leaves keys out when the name itself is sensitive, e.g. `"Customers:*"` (`*` matches anything, case-insensitive).
+- Tags with different keys produce a warning (`ApiToken: in develop, missing in production`); `encode` still succeeds.
 
 ### 4. Decrypt secrets
 

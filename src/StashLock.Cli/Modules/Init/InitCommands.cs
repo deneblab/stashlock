@@ -56,7 +56,7 @@ internal class InitCommands
             Directory.CreateDirectory(targetDir);
         }
 
-        var configPath = Path.Combine(targetDir, "stashlock.config.json");
+        var configPath = VaultConfig.PathIn(targetDir);
         if (File.Exists(configPath))
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
@@ -90,21 +90,13 @@ internal class InitCommands
             Console.ResetColor();
         }
 
-        var config = new StashlockConfig
-        {
-            Version = "00001",
-            Name = derivedName,
-            Tags = tagList,
-            ServerUrl = url
-        };
+        File.WriteAllText(configPath, ConfigTemplate.Render(derivedName, tagList, new StashlockConfig().Version, url));
 
         var options = new JsonSerializerOptions
         {
             WriteIndented = true,
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
-        var json = JsonSerializer.Serialize(config, options);
-        File.WriteAllText(configPath, json);
 
         _log.LogInformation("Created stashlock.config.json at {Path}", configPath);
         Console.ForegroundColor = ConsoleColor.Green;

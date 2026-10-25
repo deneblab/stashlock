@@ -75,7 +75,16 @@ internal class PublishCommands
 
         // Try to load config from vault directory
         var configDir = File.Exists(fullPath) ? Path.GetDirectoryName(fullPath)! : fullPath;
-        var config = LoadConfig(configDir);
+        StashlockConfig? config;
+        try
+        {
+            config = VaultConfig.Load(configDir);
+        }
+        catch (JsonException ex)
+        {
+            PrintError($"Error: Failed to parse {VaultConfig.PathIn(configDir)}: {ex.Message}");
+            return ExitCodes.Error;
+        }
 
         // Resolve API URL: flag > env var > config
         var apiUrl = ServerSettings.ResolveUrl(url, config);
@@ -98,7 +107,7 @@ internal class PublishCommands
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.Error.WriteLine($"  API URL:    {apiUrl}");
             Console.Error.WriteLine($"  API Key:    {resolvedApiKey[..Math.Min(8, resolvedApiKey.Length)]}...");
-            Console.Error.WriteLine($"  Config:     {(config != null ? Path.Combine(configDir, "stashlock.config.json") : "(not found)")}");
+            Console.Error.WriteLine($"  Config:     {(config != null ? VaultConfig.PathIn(configDir) : "(not found)")}");
             Console.Error.WriteLine($"  Files:      {files.Length}");
             if (expiresIn.HasValue)
                 Console.Error.WriteLine($"  TTL:        {expiresIn}s");
@@ -150,20 +159,6 @@ internal class PublishCommands
         Console.WriteLine();
         Console.WriteLine($"Publish complete: {published} published, {failed} failed.");
         return failed == 0 ? ExitCodes.Ok : published > 0 ? ExitCodes.Partial : ExitCodes.Error;
-    }
-
-    private static StashlockConfig? LoadConfig(string directory)
-    {
-        var configPath = Path.Combine(directory, "stashlock.config.json");
-        if (!File.Exists(configPath))
-            return null;
-
-        var json = File.ReadAllText(configPath);
-        return JsonSerializer.Deserialize<StashlockConfig>(json, new JsonSerializerOptions
-        {
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
-        });
     }
 
     private static void PrintError(string message)

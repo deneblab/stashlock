@@ -83,7 +83,7 @@ internal class GenerateCommands
         FlattenJson(secretsRaw, "", secretsDict);
 
         var secretsDir = Path.GetDirectoryName(secretFilePath)!;
-        var configPath = Path.Combine(secretsDir, "stashlock.config.json");
+        var configPath = VaultConfig.PathIn(secretsDir);
         if (!File.Exists(configPath))
         {
             Console.ForegroundColor = ConsoleColor.Red;
@@ -93,12 +93,15 @@ internal class GenerateCommands
             return Task.FromResult(ExitCodes.Error);
         }
 
-        var configJson = File.ReadAllText(configPath);
-        var config = JsonSerializer.Deserialize<StashlockConfig>(configJson, ReadOptions);
-        if (config == null)
+        StashlockConfig config;
+        try
+        {
+            config = VaultConfig.Load(secretsDir)!;
+        }
+        catch (JsonException ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.Error.WriteLine("Error: Failed to parse stashlock.config.json");
+            Console.Error.WriteLine($"Error: Failed to parse stashlock.config.json: {ex.Message}");
             Console.ResetColor();
             return Task.FromResult(ExitCodes.Error);
         }
@@ -155,6 +158,21 @@ internal class GenerateCommands
             Console.WriteLine($"Generated: {outputFileName}  (vault key: {vaultKey})");
             Console.ResetColor();
             generated++;
+        }
+
+        if (config.Skeleton != null)
+        {
+            var skeleton = SkeletonWriter.Write(secretsDir, inputBaseName, config.Skeleton);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"Generated: {Path.GetFileName(skeleton.Path)}  (key names only, safe to commit)");
+            Console.ResetColor();
+            if (skeleton.Warnings.Count > 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                foreach (var warning in skeleton.Warnings)
+                    Console.Error.WriteLine($"Warning: {warning}");
+                Console.ResetColor();
+            }
         }
 
         Console.WriteLine();
