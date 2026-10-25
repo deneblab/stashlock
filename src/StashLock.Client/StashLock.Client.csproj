@@ -4,6 +4,9 @@
 		<TargetFrameworks>net8.0;net10.0</TargetFrameworks>
 		<ImplicitUsings>disable</ImplicitUsings>
 		<Nullable>disable</Nullable>
+		<!-- Keep the build warning-free; new vulnerability advisories (NU190x) stay warnings -->
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
 		<RootNamespace>Deneblab.StashLock.Client</RootNamespace>
 
 		<!-- NuGet Package Metadata -->

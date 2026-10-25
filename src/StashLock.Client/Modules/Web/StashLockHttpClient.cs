@@ -24,6 +24,10 @@ public class StashLockHttpClient : IDisposable
     private readonly ILogger _log;
     private bool _disposed;
 
+    /// <summary>Creates a client for the StashLock server.</summary>
+    /// <param name="baseUrl">Server URL, e.g. <c>https://vault.example.com</c>.</param>
+    /// <param name="apiKey">API key sent as Bearer token.</param>
+    /// <param name="logger">Optional logger for request timing and errors (never secrets).</param>
     public StashLockHttpClient(string baseUrl, string apiKey = null, ILogger logger = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
@@ -106,6 +110,7 @@ public class StashLockHttpClient : IDisposable
         }
     }
 
+    /// <inheritdoc />
     public void Dispose()
     {
         if (_disposed) return;

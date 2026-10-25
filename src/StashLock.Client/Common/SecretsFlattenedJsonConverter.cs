@@ -1,14 +1,16 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Deneblab.StashLock.Client.Common;
 
+/// <summary>Reads a nested JSON object as a flat dictionary with colon-separated keys.</summary>
 public class SecretsFlattenedJsonConverter : JsonConverter<Dictionary<string, object>>
 {
     private const string _DELIMITER = ":";
 
+    /// <inheritdoc />
     public override Dictionary<string, object> Read(ref Utf8JsonReader reader, Type typeToConvert,
         JsonSerializerOptions options)
     {
@@ -19,6 +21,7 @@ public class SecretsFlattenedJsonConverter : JsonConverter<Dictionary<string, ob
         }
     }
 
+    /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, Dictionary<string, object> value, JsonSerializerOptions options)
     {
         JsonSerializer.Serialize(writer, value, options);

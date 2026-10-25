@@ -104,12 +104,12 @@ public class CacheFallbackTests : IDisposable
     }
 
     [Fact]
-    public void AddStashLock_UsesConnectionStringFromEnvironment()
+    public async Task AddStashLock_UsesConnectionStringFromEnvironment()
     {
         var old = Environment.GetEnvironmentVariable("STASHLOCK_CONNECTION_STRING");
         try
         {
-            var (box, privateKey) = EncryptSample().Result;
+            var (box, privateKey) = await EncryptSample();
             using var server = new FakeServer(_ => (200, _encrypted));
             Environment.SetEnvironmentVariable("STASHLOCK_CONNECTION_STRING",
                 $"Url={server.Url};ApiKey=slk_test;PrivateKey={privateKey};Box={box};Tag=dev");

@@ -138,7 +138,7 @@ func (h *DashboardHandler) BoxList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := boxListData{
-		pager:    newPager(page.Total, opts.Offset, boxPageSize, len(page.Entries)),
+		pager:         newPager(page.Total, opts.Offset, boxPageSize, len(page.Entries)),
 		Filtered:      opts.Box != "" || opts.Tag != "" || opts.Prefix != "" || opts.IncludeDeleted,
 		RetentionDays: h.RetentionDays,
 	}

@@ -9,11 +9,11 @@ type ApiResult struct {
 
 // ApiError is the standard error response.
 type ApiError struct {
-	Status    int               `json:"status"`
-	Title     string            `json:"title"`
-	Detail    string            `json:"detail,omitempty"`
-	TraceId   string            `json:"traceId,omitempty"`
-	ErrorCode string            `json:"errorCode,omitempty"`
+	Status    int                 `json:"status"`
+	Title     string              `json:"title"`
+	Detail    string              `json:"detail,omitempty"`
+	TraceId   string              `json:"traceId,omitempty"`
+	ErrorCode string              `json:"errorCode,omitempty"`
 	Errors    map[string][]string `json:"errors,omitempty"`
 }
 
@@ -72,32 +72,32 @@ type StatsResponse struct {
 
 // ErrorCodes mirrors the .NET ErrorCodes constants.
 var ErrorCodes = struct {
-	KeyNotFound          string
-	ValueTooLarge        string
-	ValueRequired        string
-	InvalidKeyFormat     string
-	InvalidBase64        string
-	Unauthorized         string
-	InternalError        string
-	AlreadyDeleted       string
-	Forbidden            string
-	InvalidTtl           string
-	RateLimited          string
-	DecryptionFailed     string
+	KeyNotFound           string
+	ValueTooLarge         string
+	ValueRequired         string
+	InvalidKeyFormat      string
+	InvalidBase64         string
+	Unauthorized          string
+	InternalError         string
+	AlreadyDeleted        string
+	Forbidden             string
+	InvalidTtl            string
+	RateLimited           string
+	DecryptionFailed      string
 	MissingRequiredFields string
 }{
-	KeyNotFound:          "KEY_NOT_FOUND",
-	ValueTooLarge:        "VALUE_TOO_LARGE",
-	ValueRequired:        "VALUE_REQUIRED",
-	InvalidKeyFormat:     "INVALID_KEY_FORMAT",
-	InvalidBase64:        "INVALID_BASE64",
-	Unauthorized:         "UNAUTHORIZED",
-	InternalError:        "INTERNAL_ERROR",
-	AlreadyDeleted:       "ALREADY_DELETED",
-	Forbidden:            "FORBIDDEN",
-	InvalidTtl:           "INVALID_TTL",
-	RateLimited:          "RATE_LIMITED",
-	DecryptionFailed:     "DECRYPTION_FAILED",
+	KeyNotFound:           "KEY_NOT_FOUND",
+	ValueTooLarge:         "VALUE_TOO_LARGE",
+	ValueRequired:         "VALUE_REQUIRED",
+	InvalidKeyFormat:      "INVALID_KEY_FORMAT",
+	InvalidBase64:         "INVALID_BASE64",
+	Unauthorized:          "UNAUTHORIZED",
+	InternalError:         "INTERNAL_ERROR",
+	AlreadyDeleted:        "ALREADY_DELETED",
+	Forbidden:             "FORBIDDEN",
+	InvalidTtl:            "INVALID_TTL",
+	RateLimited:           "RATE_LIMITED",
+	DecryptionFailed:      "DECRYPTION_FAILED",
 	MissingRequiredFields: "MISSING_REQUIRED_FIELDS",
 }
 

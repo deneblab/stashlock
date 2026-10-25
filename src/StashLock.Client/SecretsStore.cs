@@ -300,6 +300,7 @@ internal class SecretsStore : ISecretsStore
     /// <param name="apiUrl">Optional API URL (defaults to STASHLOCK_API_URL env var or default URL)</param>
     /// <param name="apiKey">Optional API key (defaults to STASHLOCK_API_KEY env var)</param>
     /// <param name="cancellationToken">Cancellation token</param>
+    /// <param name="loggerFactory">Optional logger factory</param>
     /// <returns>ISecretsStore instance with decrypted secrets</returns>
     internal static async Task<ISecretsStore> OpenRemoteSealedAsync(
         string box,

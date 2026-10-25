@@ -22,6 +22,10 @@ jobs:
         with:
           go-version-file: src/StashLock.Server/go.mod
           cache-dependency-path: src/StashLock.Server/go.sum
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "Run gofmt -w on:"; echo "$unformatted"; exit 1; fi
       - name: go vet
         run: go vet ./...
       - name: go test -race

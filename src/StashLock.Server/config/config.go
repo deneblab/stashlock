@@ -13,21 +13,21 @@ import (
 const MinMasterKeyLength = 32
 
 type Config struct {
-	Port                  int    `json:"port"`
-	WorkDir               string `json:"workDir"`
-	MasterKey             string `json:"masterKey"`
-	AllowedOrigins        string `json:"allowedOrigins"`
-	MaxValueSizeKB        int    `json:"maxValueSizeKB"`
-	MaxKeyLength          int    `json:"maxKeyLength"`
-	MaxRequestBodySizeKB  int    `json:"maxRequestBodySizeKB"`
-	DefaultRateLimitPerMin int   `json:"defaultRateLimitPerMinute"`
-	DeletedRetentionDays  int    `json:"deletedRetentionDays"`
-	AuditRetentionDays    int    `json:"auditRetentionDays"`
-	AdminAllowedNetworks  string `json:"adminAllowedNetworks"`
-	TrustedProxies        string `json:"trustedProxies"`
-	LogDir                string `json:"logDir"`
-	LogLevel              string `json:"logLevel"`
-	Version               string `json:"-"`
+	Port                   int    `json:"port"`
+	WorkDir                string `json:"workDir"`
+	MasterKey              string `json:"masterKey"`
+	AllowedOrigins         string `json:"allowedOrigins"`
+	MaxValueSizeKB         int    `json:"maxValueSizeKB"`
+	MaxKeyLength           int    `json:"maxKeyLength"`
+	MaxRequestBodySizeKB   int    `json:"maxRequestBodySizeKB"`
+	DefaultRateLimitPerMin int    `json:"defaultRateLimitPerMinute"`
+	DeletedRetentionDays   int    `json:"deletedRetentionDays"`
+	AuditRetentionDays     int    `json:"auditRetentionDays"`
+	AdminAllowedNetworks   string `json:"adminAllowedNetworks"`
+	TrustedProxies         string `json:"trustedProxies"`
+	LogDir                 string `json:"logDir"`
+	LogLevel               string `json:"logLevel"`
+	Version                string `json:"-"`
 }
 
 func (c *Config) MaxValueSizeBytes() int {
@@ -95,17 +95,17 @@ var BuildVersion = "0.1.0-dev"
 
 func Load() *Config {
 	cfg := &Config{
-		Port:                  8080,
-		WorkDir:               "./work",
-		MaxValueSizeKB:        100,
-		MaxKeyLength:          120,
-		MaxRequestBodySizeKB:  110,
+		Port:                   8080,
+		WorkDir:                "./work",
+		MaxValueSizeKB:         100,
+		MaxKeyLength:           120,
+		MaxRequestBodySizeKB:   110,
 		DefaultRateLimitPerMin: 60,
-		DeletedRetentionDays:  30,
-		AuditRetentionDays:    60,
-		LogDir:                "./logs",
-		LogLevel:              "info",
-		Version:               BuildVersion,
+		DeletedRetentionDays:   30,
+		AuditRetentionDays:     60,
+		LogDir:                 "./logs",
+		LogLevel:               "info",
+		Version:                BuildVersion,
 	}
 
 	// Try loading from config.json

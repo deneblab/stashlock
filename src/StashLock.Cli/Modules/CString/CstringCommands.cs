@@ -75,7 +75,7 @@ internal class CstringCommands
             return Task.FromResult(ExitCodes.Error);
         }
 
-        StashlockConfig config;
+        StashlockConfig? config;
         try
         {
             var configJson = File.ReadAllText(configPath);
@@ -119,7 +119,7 @@ internal class CstringCommands
             return Task.FromResult(ExitCodes.Error);
         }
 
-        KeyPairModel keyPair;
+        KeyPairModel? keyPair;
         try
         {
             var keyJson = File.ReadAllText(keyFilePath);
@@ -203,7 +203,7 @@ internal class CstringCommands
         return string.Join(";", parts);
     }
 
-    private static string PromptForTag(List<string> tags, string dir)
+    private static string? PromptForTag(List<string> tags, string dir)
     {
         // Also discover tags from key files on disk
         var keyFileTags = new List<string>();

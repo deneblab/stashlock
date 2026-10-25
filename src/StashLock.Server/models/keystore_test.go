@@ -6,9 +6,9 @@ import (
 
 func TestNewKeyStore_ValidKey(t *testing.T) {
 	tests := []struct {
-		input              string
-		box, tag, version  string
-		fullAddress        string
+		input             string
+		box, tag, version string
+		fullAddress       string
 	}{
 		{"mybox.mytag.00001", "mybox", "mytag", "00001", "mybox.mytag.00001"},
 		{"app.config.00002", "app", "config", "00002", "app.config.00002"},

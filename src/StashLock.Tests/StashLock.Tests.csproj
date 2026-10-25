@@ -4,6 +4,9 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<!-- Keep the build warning-free; new vulnerability advisories (NU190x) stay warnings -->
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
 		<NoWarn>$(NoWarn);CS0436</NoWarn>
 	</PropertyGroup>
 
