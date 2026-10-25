@@ -122,7 +122,7 @@ var store = await StashLock.CreateClient()
     .FromFile("./secrets.json")
     .OpenAsync();
 
-// Local encrypted file (SOPS or whole-file mode)
+// Local encrypted file (stashlock.enc.*.json)
 var store = await StashLock.CreateClient()
     .FromEncryptedFile("./stashlock.enc.prod.secrets.json")
     .WithPrivateKey(key)
@@ -150,7 +150,7 @@ if (!result.IsValid)
 | `.WithBox(box, tag, version?)` | Sealed-box mode with box/tag/version |
 | `.FromDevFile(path?)` | Plain JSON file (auto-discovers if no path) |
 | `.FromFile(path)` | Explicit plain JSON file |
-| `.FromEncryptedFile(path)` | Local encrypted file (SOPS or whole-file) |
+| `.FromEncryptedFile(path)` | Local encrypted file (`stashlock.enc.*.json`) |
 | `.WithApiUrl(url)` | Override API URL |
 | `.WithApiKey(key)` | Override API key |
 | `.WithPrivateKey(base64)` | X25519 private key for sealed-box decryption |

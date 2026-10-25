@@ -111,66 +111,36 @@ public class AesGcmHelperTests
     }
 
     [Fact]
-    public void ComputeMac_ShouldBeDeterministic()
+    public void ComputeMac_IsDeterministicAndCoversKeysValuesAndVaultKey()
     {
-        var dataKey = AesGcmHelper.GenerateDataKey();
-        var values = new SortedDictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["key1"] = "ENC[AesGcm:abc]",
-            ["key2"] = "ENC[AesGcm:def]"
-        };
+        var key = AesGcmHelper.GenerateDataKey();
+        var values = new SortedDictionary<string, string>(StringComparer.Ordinal) { ["a"] = "1", ["b"] = "2" };
+        var mac = AesGcmHelper.ComputeMac(key, "app.dev.00001", values);
 
-        var mac1 = AesGcmHelper.ComputeMac(dataKey, values);
-        var mac2 = AesGcmHelper.ComputeMac(dataKey, values);
+        Assert.Equal(mac, AesGcmHelper.ComputeMac(key, "app.dev.00001", values));
+        Assert.NotEqual(mac, AesGcmHelper.ComputeMac(key, "app.prod.00001", values));
+        Assert.NotEqual(mac, AesGcmHelper.ComputeMac(AesGcmHelper.GenerateDataKey(), "app.dev.00001", values));
 
-        Assert.Equal(mac1, mac2);
+        var changed = new SortedDictionary<string, string>(values, StringComparer.Ordinal) { ["b"] = "3" };
+        Assert.NotEqual(mac, AesGcmHelper.ComputeMac(key, "app.dev.00001", changed));
     }
 
     [Fact]
-    public void VerifyMac_ShouldReturnTrueForValidMac()
+    public void ComputeMac_FieldBoundariesMatter()
     {
-        var dataKey = AesGcmHelper.GenerateDataKey();
-        var values = new SortedDictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["db"] = "ENC[AesGcm:abc]",
-            ["api_key"] = "ENC[AesGcm:def]"
-        };
-
-        var mac = AesGcmHelper.ComputeMac(dataKey, values);
-
-        Assert.True(AesGcmHelper.VerifyMac(dataKey, values, mac));
+        // Without length prefixes ("ab","c") and ("a","bc") would hash the same bytes
+        var key = AesGcmHelper.GenerateDataKey();
+        var one = new SortedDictionary<string, string>(StringComparer.Ordinal) { ["ab"] = "c" };
+        var two = new SortedDictionary<string, string>(StringComparer.Ordinal) { ["a"] = "bc" };
+        Assert.NotEqual(AesGcmHelper.ComputeMac(key, "v", one), AesGcmHelper.ComputeMac(key, "v", two));
     }
 
     [Fact]
-    public void VerifyMac_ShouldReturnFalseForTamperedValues()
+    public void EncryptDecrypt_WithAssociatedData_MustMatch()
     {
-        var dataKey = AesGcmHelper.GenerateDataKey();
-        var values = new SortedDictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["key1"] = "ENC[AesGcm:abc]"
-        };
-
-        var mac = AesGcmHelper.ComputeMac(dataKey, values);
-
-        // Tamper with the values
-        values["key1"] = "ENC[AesGcm:tampered]";
-
-        Assert.False(AesGcmHelper.VerifyMac(dataKey, values, mac));
-    }
-
-    [Fact]
-    public void ComputeMac_ShouldDifferWithDifferentKeys()
-    {
-        var key1 = AesGcmHelper.GenerateDataKey();
-        var key2 = AesGcmHelper.GenerateDataKey();
-        var values = new SortedDictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["key1"] = "value1"
-        };
-
-        var mac1 = AesGcmHelper.ComputeMac(key1, values);
-        var mac2 = AesGcmHelper.ComputeMac(key2, values);
-
-        Assert.NotEqual(mac1, mac2);
+        var key = AesGcmHelper.GenerateDataKey();
+        var enc = AesGcmHelper.EncryptValue(key, "secret", associatedData: "Db:Password");
+        Assert.Equal("secret", AesGcmHelper.DecryptValue(key, enc, associatedData: "Db:Password"));
+        Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => AesGcmHelper.DecryptValue(key, enc, associatedData: "ApiKey"));
     }
 }

@@ -328,7 +328,7 @@ Images and packages are tagged with:
 | **404 Key Not Found** | Key doesn't exist or has been deleted | Use `GET /boxes?prefix=<box>` to list available keys. Check for typos in the `box.tag.version` format. |
 | **413 Payload Too Large** | Request body bigger than `maxRequestBodySizeKB` | Publish a smaller file or raise `STASHLOCK_MAX_REQUEST_BODY_KB` (and `STASHLOCK_MAX_VALUE_SIZE_KB`). |
 | **429 Too Many Requests** | The key's rate limit was exceeded, or 10 failed authentications came from your address within 5 minutes (blocked for 15 minutes) | Wait for the `Retry-After` header value (seconds). For rate limits, raise the key's limit in the dashboard; for blocks, fix the key that keeps failing. |
-| **Decryption failed** | Wrong private key, corrupted data, or mode mismatch | Verify the private key matches the public key used for encryption. Confirm encryption mode (SOPS vs whole-file) is consistent. |
+| **Decryption failed** | Wrong private key, modified file, a file for another entry, or a file from an older CLI | Verify the private key matches the public key used for encryption. Confirm encryption mode (SOPS vs whole-file) is consistent. |
 | **No key files found** (CLI) | Missing `stashlock.key.*.json` in vault directory | Run `stashlock keygen <dir>` to generate key files, or `stashlock init <dir> --tags production,develop` to create both config and keys. |
 | **Config not found** (CLI) | Missing `stashlock.config.json` | Run `stashlock init <dir>` to create the vault configuration. |
 

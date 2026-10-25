@@ -26,23 +26,11 @@ internal class SopsMetadata
     public string VaultKey { get; set; } = string.Empty;
 
     [JsonPropertyName("mode")]
-    public string Mode { get; set; } = "sops";
+    public string Mode { get; set; } = SopsCodec.Mode;
 
     [JsonPropertyName("dataKey")]
     public string DataKey { get; set; } = string.Empty;
 
     [JsonPropertyName("mac")]
     public string Mac { get; set; } = string.Empty;
-}
-
-/// <summary>
-///     Whole-file mode encrypted file format. Written by the CLI, read by the CLI and the client.
-/// </summary>
-internal class StashlockEncryptedFile
-{
-    [JsonPropertyName("VaultKey")]
-    public string VaultKey { get; set; } = string.Empty;
-
-    [JsonPropertyName("EncryptedData")]
-    public string EncryptedData { get; set; } = string.Empty;
 }

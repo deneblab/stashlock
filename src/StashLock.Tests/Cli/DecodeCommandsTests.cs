@@ -83,35 +83,6 @@ public class DecodeCommandsTests
     }
 
     [Fact]
-    public void WholeFileMode_RoundTrip_ShouldDecryptToOriginalJson()
-    {
-        var keyPair = EciesModule.GenerateKeyPair("test");
-        var originalJson = "{\"db\":\"server=prod\",\"key\":\"abc123\"}";
-
-        var encrypted = GenerateWholeFile(originalJson, keyPair, "app.test.00001");
-        var decrypted = DecodeWholeFile(encrypted, keyPair);
-
-        var original = JsonSerializer.Deserialize<JsonElement>(originalJson);
-        var result = JsonSerializer.Deserialize<JsonElement>(decrypted);
-
-        Assert.Equal(
-            JsonSerializer.Serialize(original),
-            JsonSerializer.Serialize(result));
-    }
-
-    [Fact]
-    public void WholeFileMode_ShouldFailWithWrongKey()
-    {
-        var keyPair = EciesModule.GenerateKeyPair("right");
-        var wrongKey = EciesModule.GenerateKeyPair("wrong");
-        var originalJson = "{\"secret\":\"value\"}";
-
-        var encrypted = GenerateWholeFile(originalJson, keyPair, "app.right.00001");
-
-        Assert.ThrowsAny<Exception>(() => DecodeWholeFile(encrypted, wrongKey));
-    }
-
-    [Fact]
     public void UnflattenKeys_ShouldReconstructNestedStructure()
     {
         var keyPair = EciesModule.GenerateKeyPair("test");
@@ -151,70 +122,17 @@ public class DecodeCommandsTests
 
     // --- Helper methods that mirror the actual encode/decode logic ---
 
-    private static SopsEncryptedFile GenerateSops(
-        Dictionary<string, string> secrets, KeyPairModel keyPair, string vaultKey)
-    {
-        var dataKey = AesGcmHelper.GenerateDataKey();
-        var encryptedValues = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var kvp in secrets)
-            encryptedValues[kvp.Key] = AesGcmHelper.EncryptValue(dataKey, kvp.Value);
+        private static SopsEncryptedFile GenerateSops(
+        Dictionary<string, string> secrets, KeyPairModel keyPair, string vaultKey) =>
+        SopsCodec.Encrypt(secrets, keyPair.GetPublicKeyBytes(), vaultKey);
 
-        var mac = AesGcmHelper.ComputeMac(dataKey, encryptedValues);
-        var macEncrypted = AesGcmHelper.EncryptValue(dataKey, Convert.ToBase64String(mac));
-        var wrappedDataKey = EciesModule.Seal(dataKey, keyPair.GetPublicKeyBytes());
-
-        System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
-
-        return new SopsEncryptedFile
-        {
-            Values = new Dictionary<string, string>(encryptedValues),
-            Metadata = new SopsMetadata
-            {
-                VaultKey = vaultKey,
-                Mode = "sops",
-                DataKey = Convert.ToBase64String(wrappedDataKey),
-                Mac = macEncrypted
-            }
-        };
-    }
-
-    private static Dictionary<string, string> DecodeSops(SopsEncryptedFile sopsFile, KeyPairModel keyPair)
-    {
-        var wrappedDataKey = Convert.FromBase64String(sopsFile.Metadata.DataKey);
-        var dataKey = EciesModule.Open(wrappedDataKey, keyPair.GetPrivateKeyBytes());
-
-        var macBase64 = AesGcmHelper.DecryptValue(dataKey, sopsFile.Metadata.Mac);
-        var expectedMac = Convert.FromBase64String(macBase64);
-        var sortedValues = new SortedDictionary<string, string>(sopsFile.Values, StringComparer.Ordinal);
-
-        if (!AesGcmHelper.VerifyMac(dataKey, sortedValues, expectedMac))
-            throw new InvalidOperationException("MAC verification failed");
-
-        var result = new Dictionary<string, string>();
-        foreach (var kvp in sopsFile.Values)
-            result[kvp.Key] = AesGcmHelper.DecryptValue(dataKey, kvp.Value);
-
-        System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
-        return result;
-    }
+        private static Dictionary<string, string> DecodeSops(SopsEncryptedFile sopsFile, KeyPairModel keyPair) =>
+        SopsCodec.Decrypt(sopsFile, keyPair.GetPrivateKeyBytes());
 
     private static string DecodeSopsToJson(string sopsJson, KeyPairModel keyPair)
     {
         var sopsFile = JsonSerializer.Deserialize<SopsEncryptedFile>(sopsJson)!;
-        var wrappedDataKey = Convert.FromBase64String(sopsFile.Metadata.DataKey);
-        var dataKey = EciesModule.Open(wrappedDataKey, keyPair.GetPrivateKeyBytes());
-
-        var macBase64 = AesGcmHelper.DecryptValue(dataKey, sopsFile.Metadata.Mac);
-        var expectedMac = Convert.FromBase64String(macBase64);
-        var sortedValues = new SortedDictionary<string, string>(sopsFile.Values, StringComparer.Ordinal);
-        if (!AesGcmHelper.VerifyMac(dataKey, sortedValues, expectedMac))
-            throw new InvalidOperationException("MAC verification failed");
-
-        var decrypted = new Dictionary<string, string>();
-        foreach (var kvp in sopsFile.Values)
-            decrypted[kvp.Key] = AesGcmHelper.DecryptValue(dataKey, kvp.Value);
-
-        System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
+        var decrypted = SopsCodec.Decrypt(sopsFile, keyPair.GetPrivateKeyBytes());
 
         // Use the same unflatten logic as DecodeCommands
         var root = new Dictionary<string, object>();
@@ -227,26 +145,7 @@ public class DecodeCommandsTests
         return JsonSerializer.Serialize(root, WriteOptions);
     }
 
-    private static StashlockEncryptedFile GenerateWholeFile(
-        string secretsJson, KeyPairModel keyPair, string vaultKey)
-    {
-        var plaintextBytes = Encoding.UTF8.GetBytes(secretsJson);
-        var sealedBytes = EciesModule.Seal(plaintextBytes, keyPair.GetPublicKeyBytes());
-        return new StashlockEncryptedFile
-        {
-            VaultKey = vaultKey,
-            EncryptedData = Convert.ToBase64String(sealedBytes)
-        };
-    }
-
-    private static string DecodeWholeFile(StashlockEncryptedFile encFile, KeyPairModel keyPair)
-    {
-        var sealedBytes = Convert.FromBase64String(encFile.EncryptedData);
-        var plaintext = EciesModule.Open(sealedBytes, keyPair.GetPrivateKeyBytes());
-        return Encoding.UTF8.GetString(plaintext);
-    }
-
-    private static string? ExtractTag(string vaultKey)
+            private static string? ExtractTag(string vaultKey)
     {
         var parts = vaultKey.Split('.');
         return parts.Length >= 3 ? parts[^2] : null;

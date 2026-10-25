@@ -95,7 +95,6 @@ internal class InitCommands
             Version = "00001",
             Name = derivedName,
             Tags = tagList,
-            EncryptionMode = "sops",
             ServerUrl = url
         };
 

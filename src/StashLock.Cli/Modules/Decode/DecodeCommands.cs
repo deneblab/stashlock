@@ -92,24 +92,15 @@ internal class DecodeCommands
             return Task.FromResult(ExitCodes.Error);
         }
 
-        // Auto-detect mode
-        string result;
-        if (parsed.ContainsKey("_stashlock"))
-        {
-            result = DecodeSopsMode(json, key, fileDir);
-        }
-        else if (parsed.ContainsKey("EncryptedData"))
-        {
-            result = DecodeWholeFileMode(json, key, fileDir);
-        }
-        else
+        if (!parsed.ContainsKey("_stashlock"))
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.Error.WriteLine("Error: Unrecognized encrypted file format.");
-            Console.Error.WriteLine("Expected '_stashlock' (sops mode) or 'EncryptedData' (wholefile mode).");
+            Console.Error.WriteLine("Error: Not a StashLock encrypted file (no '_stashlock' metadata).");
+            Console.Error.WriteLine("Files from older CLI versions are not supported; encode the secrets again.");
             Console.ResetColor();
             return Task.FromResult(ExitCodes.Error);
         }
+        var result = DecodeSopsMode(json, key, fileDir);
 
         if (result == null!)
             return Task.FromResult(ExitCodes.Error);
@@ -167,50 +158,6 @@ internal class DecodeCommands
 
         _log.LogInformation("Successfully decoded {Count} values ({Mode})", decrypted.Count, sopsFile.Metadata.Mode);
         return JsonSerializer.Serialize(nested, WriteOptions);
-    }
-
-    private string DecodeWholeFileMode(string json, string keyOverride, string fileDir)
-    {
-        var encFile = JsonSerializer.Deserialize<StashlockEncryptedFile>(json, ReadOptions);
-        if (encFile == null || string.IsNullOrEmpty(encFile.EncryptedData))
-        {
-            PrintError("Error: Failed to parse whole-file encrypted structure");
-            return null!;
-        }
-
-        var vaultKey = encFile.VaultKey;
-        _log.LogInformation("Decoding whole-file, vaultKey: {VaultKey}", vaultKey);
-
-        var keyPair = LoadKeyFile(vaultKey, keyOverride, fileDir);
-        if (keyPair == null)
-            return null!;
-
-        try
-        {
-            var sealedBytes = Convert.FromBase64String(encFile.EncryptedData);
-            var plaintext = EciesModule.Open(sealedBytes, keyPair.GetPrivateKeyBytes());
-            var plaintextJson = Encoding.UTF8.GetString(plaintext);
-
-            // Pretty-print if valid JSON
-            try
-            {
-                var doc = JsonSerializer.Deserialize<JsonElement>(plaintextJson, ReadOptions);
-                plaintextJson = JsonSerializer.Serialize(doc, WriteOptions);
-            }
-            catch
-            {
-                // Return as-is if not valid JSON
-            }
-
-            _log.LogInformation("Successfully decoded whole-file");
-            return plaintextJson;
-        }
-        catch (Exception ex)
-        {
-            PrintError($"Error: Decryption failed — {ex.Message}");
-            _log.LogError(ex, "Whole-file decryption failed");
-            return null!;
-        }
     }
 
     private KeyPairModel? LoadKeyFile(string vaultKey, string keyOverride, string fileDir)

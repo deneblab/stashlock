@@ -15,7 +15,6 @@ public class StashlockConfigTests
         Assert.Equal("00001", config.Version);
         Assert.Equal(string.Empty, config.Name);
         Assert.Empty(config.Tags);
-        Assert.Equal("sops", config.EncryptionMode);
         Assert.Equal(string.Empty, config.ServerUrl);
     }
 
@@ -27,7 +26,6 @@ public class StashlockConfigTests
             Version = "00002",
             Name = "my-vault",
             Tags = new List<string> { "production", "staging" },
-            EncryptionMode = "wholefile",
             ServerUrl = "https://vault.example.com"
         };
 
@@ -37,7 +35,6 @@ public class StashlockConfigTests
         Assert.Equal(original.Version, deserialized.Version);
         Assert.Equal(original.Name, deserialized.Name);
         Assert.Equal(original.Tags, deserialized.Tags);
-        Assert.Equal(original.EncryptionMode, deserialized.EncryptionMode);
         Assert.Equal(original.ServerUrl, deserialized.ServerUrl);
     }
 
@@ -50,7 +47,7 @@ public class StashlockConfigTests
         Assert.Contains("\"Version\"", json);
         Assert.Contains("\"Name\"", json);
         Assert.Contains("\"Tags\"", json);
-        Assert.Contains("\"EncryptionMode\"", json);
+        Assert.DoesNotContain("EncryptionMode", json);
         Assert.Contains("\"ServerUrl\"", json);
         Assert.DoesNotContain("ApiKey", json);
     }

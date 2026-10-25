@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using Deneblab.StashLock.Cli.Modules.Encode;
 using Deneblab.StashLock.Shared.Formats;
 
 namespace Deneblab.StashLock.Cli.Modules.Publish;
@@ -31,12 +30,6 @@ internal static class VaultKeyExtractor
         {
             var sopsFile = JsonSerializer.Deserialize<SopsEncryptedFile>(json, ReadOptions);
             return sopsFile?.Metadata?.VaultKey;
-        }
-
-        if (parsed.ContainsKey("VaultKey"))
-        {
-            var wholeFile = JsonSerializer.Deserialize<StashlockEncryptedFile>(json, ReadOptions);
-            return string.IsNullOrEmpty(wholeFile?.VaultKey) ? null : wholeFile.VaultKey;
         }
 
         return null;

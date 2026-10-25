@@ -357,7 +357,7 @@ internal class SecretsStore : ISecretsStore
                 lf.CreateLogger("Deneblab.StashLock.Client.Http"));
             var encryptedBase64 = await httpClient.GetAsync(webKeySafeUrl, cancellationToken);
 
-            // SOPS (v1/v2) or whole-file JSON; v2 files must belong to the requested box.tag.version
+            // The file must belong to the requested box.tag.version
             var dictionary = Common.SopsDecryptor.DecryptAutoDetect(encryptedBase64, privateKeyBytes, webKey);
             log.LogInformation("Opened remote vault {Box}.{Tag}.{Version} ({Count} entries)", box, tag, version, dictionary.Count);
             return FromPlainDictionary(dictionary);
@@ -598,7 +598,7 @@ internal class SecretsStore : ISecretsStore
     }
 
     /// <summary>
-    ///     Opens a secrets store from a local encrypted file (SOPS or whole-file mode).
+    ///     Opens a secrets store from a local stashlock.enc.*.json file.
     ///     Auto-detects the encryption mode from file content.
     /// </summary>
     /// <param name="filePath">Path to the stashlock.enc.*.json encrypted file</param>

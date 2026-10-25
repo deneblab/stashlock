@@ -104,7 +104,6 @@ Without `--name` the vault is named after its directory (`my-vault` → `my-vaul
   "Version": "00001",
   "Name": "myapp",
   "Tags": ["production", "develop"],
-  "EncryptionMode": "sops",
   "ServerUrl": "http://localhost:8099"
 }
 ```
@@ -135,8 +134,8 @@ stashlock encode ./my-vault/secrets.json
 
 Output:
 ```
-Generated: stashlock.enc.production.secrets.json  (vault key: myapp.production.00001, mode: sops)
-Generated: stashlock.enc.develop.secrets.json     (vault key: myapp.develop.00001, mode: sops)
+Generated: stashlock.enc.production.secrets.json  (vault key: myapp.production.00001)
+Generated: stashlock.enc.develop.secrets.json     (vault key: myapp.develop.00001)
 ```
 
 Each tag gets its own encrypted file, sealed with that tag's public key.

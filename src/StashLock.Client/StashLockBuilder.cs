@@ -117,7 +117,7 @@ public class StashLockBuilder
     }
 
     /// <summary>
-    /// Configure to load from a local encrypted file (SOPS or whole-file mode).
+    /// Configure to load from a local stashlock.enc.*.json file.
     /// </summary>
     public StashLockBuilder FromEncryptedFile(string filePath)
     {

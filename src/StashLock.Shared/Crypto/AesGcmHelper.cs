@@ -92,37 +92,10 @@ internal static class AesGcmHelper
     }
 
     /// <summary>
-    ///     Computes HMAC-SHA256 over all key-value pairs for integrity verification.
-    ///     Keys are sorted to ensure deterministic MAC regardless of JSON property order.
-    /// </summary>
-    public static byte[] ComputeMac(byte[] dataKey, System.Collections.Generic.SortedDictionary<string, string> encryptedValues)
-    {
-        using var hmac = new HMACSHA256(dataKey);
-        foreach (var kvp in encryptedValues)
-        {
-            var keyBytes = Encoding.UTF8.GetBytes(kvp.Key);
-            var valueBytes = Encoding.UTF8.GetBytes(kvp.Value);
-            hmac.TransformBlock(keyBytes, 0, keyBytes.Length, null, 0);
-            hmac.TransformBlock(valueBytes, 0, valueBytes.Length, null, 0);
-        }
-        hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        return hmac.Hash!;
-    }
-
-    /// <summary>
-    ///     Verifies the HMAC-SHA256 MAC over encrypted values.
-    /// </summary>
-    public static bool VerifyMac(byte[] dataKey, System.Collections.Generic.SortedDictionary<string, string> encryptedValues, byte[] expectedMac)
-    {
-        var computedMac = ComputeMac(dataKey, encryptedValues);
-        return CryptographicOperations.FixedTimeEquals(computedMac, expectedMac);
-    }
-
-    /// <summary>
     ///     SOPS v2 MAC: HMAC-SHA256 over a length-prefixed encoding of the format label, the vault key
     ///     and every (key, encrypted value) pair in ordinal order, so field boundaries are unambiguous.
     /// </summary>
-    public static byte[] ComputeMacV2(byte[] macKey, string vaultKey, SortedDictionary<string, string> encryptedValues)
+    public static byte[] ComputeMac(byte[] macKey, string vaultKey, SortedDictionary<string, string> encryptedValues)
     {
         using var hmac = new HMACSHA256(macKey);
         void Field(string value)

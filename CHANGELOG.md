@@ -3,6 +3,13 @@
 All notable changes to StashLock (server image `ghcr.io/deneblab/stashlock-server`, NuGet packages `Deneblab.StashLock.Cli` and `Deneblab.StashLock.Client`).
 Versions follow [Semantic Versioning](https://semver.org/); while the major version is 0, a minor release may contain breaking changes.
 
+## [Unreleased]
+
+### Removed
+
+- Whole-file encryption mode (`EncryptionMode` in `stashlock.config.json` is gone; an existing value is ignored).
+- SOPS v1 files (`"mode": "sops"`) and `stashlock encode --format`. There is one file format, `sops-v2`; files written by 0.5.0 builds stay readable.
+
 ## [0.5.0] — 2026-10-25
 
 A security redesign: new access model, hardened server, new dashboard, SOPS v2 file format.

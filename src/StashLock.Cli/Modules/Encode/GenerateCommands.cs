@@ -36,27 +36,16 @@ internal class GenerateCommands
     /// Examples:
     ///   stashlock encode ./my-vault/secrets.json
     ///   stashlock encode ./my-vault/secrets.json --verbose
-    ///   stashlock encode ./my-vault/secrets.json --format 1   # for clients older than SOPS v2
     /// </summary>
     /// <param name="file">Path to the plaintext JSON secrets file</param>
     /// <param name="verbose">Show resolved configuration before encoding</param>
-    /// <param name="format">SOPS file format: 2 (default) or 1 for clients that cannot read v2 yet</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
     public Task<int> Root(
         [Argument] string file,
         bool verbose = false,
-        int format = 2,
         CancellationToken cancellationToken = default)
     {
-        if (format != 1 && format != 2)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.Error.WriteLine($"Error: --format must be 1 or 2 (got {format})");
-            Console.ResetColor();
-            return Task.FromResult(ExitCodes.Error);
-        }
-
         var secretFilePath = Path.IsPathFullyQualified(file)
             ? file
             : Path.GetFullPath(file);
@@ -139,14 +128,11 @@ internal class GenerateCommands
             Console.Error.WriteLine($"  Config:     {configPath}");
             Console.Error.WriteLine($"  Vault:      {config.Name}");
             Console.Error.WriteLine($"  Version:    {config.Version}");
-            Console.Error.WriteLine($"  Mode:       {config.EncryptionMode ?? "sops"}");
             Console.Error.WriteLine($"  Key files:  {keyFiles.Count} ({string.Join(", ", keyFiles.Keys)})");
             Console.ResetColor();
             Console.WriteLine();
         }
 
-        var mode = config.EncryptionMode ?? "sops";
-        var modeLabel = mode.Equals("sops", StringComparison.OrdinalIgnoreCase) ? (format == 2 ? SopsCodec.ModeV2 : SopsCodec.ModeV1) : mode;
         var inputBaseName = Path.GetFileNameWithoutExtension(secretFilePath);
         var jsonOptions = new JsonSerializerOptions
         {
@@ -158,62 +144,22 @@ internal class GenerateCommands
         foreach (var (tag, keyPair) in keyFiles)
         {
             var vaultKey = $"{config.Name}.{tag}.{config.Version}";
-            string outputFileName;
-            string outputJson;
-
-            if (mode.Equals("sops", StringComparison.OrdinalIgnoreCase))
-            {
-                outputJson = GenerateSopsMode(secretsDict, keyPair, vaultKey, jsonOptions, format);
-                outputFileName = $"stashlock.enc.{tag}.{inputBaseName}.json";
-            }
-            else
-            {
-                outputJson = GenerateWholeFileMode(secretsJson, keyPair, vaultKey, jsonOptions);
-                outputFileName = $"stashlock.enc.{tag}.{inputBaseName}.json";
-            }
+            var outputFileName = $"stashlock.enc.{tag}.{inputBaseName}.json";
+            var outputJson = JsonSerializer.Serialize(SopsCodec.Encrypt(secretsDict, keyPair.GetPublicKeyBytes(), vaultKey), jsonOptions);
 
             var outputPath = Path.Combine(secretsDir, outputFileName);
             File.WriteAllText(outputPath, outputJson);
 
-            _log.LogInformation("Generated encrypted file for tag {Tag}: {File} (mode: {Mode})", tag, outputPath, mode);
+            _log.LogInformation("Generated encrypted file for tag {Tag}: {File}", tag, outputPath);
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"Generated: {outputFileName}  (vault key: {vaultKey}, mode: {modeLabel})");
+            Console.WriteLine($"Generated: {outputFileName}  (vault key: {vaultKey})");
             Console.ResetColor();
             generated++;
         }
 
         Console.WriteLine();
-        Console.WriteLine($"Encode complete: {generated} encrypted file(s) created (mode: {modeLabel}).");
+        Console.WriteLine($"Encode complete: {generated} encrypted file(s) created.");
         return Task.FromResult(ExitCodes.Ok);
-    }
-
-    private static string GenerateSopsMode(
-        Dictionary<string, string> secrets,
-        KeyPairModel keyPair,
-        string vaultKey,
-        JsonSerializerOptions jsonOptions,
-        int format)
-    {
-        var output = SopsCodec.Encrypt(secrets, keyPair.GetPublicKeyBytes(), vaultKey, format);
-        return JsonSerializer.Serialize(output, jsonOptions);
-    }
-
-    private static string GenerateWholeFileMode(
-        string secretsJson,
-        KeyPairModel keyPair,
-        string vaultKey,
-        JsonSerializerOptions jsonOptions)
-    {
-        var plaintextBytes = Encoding.UTF8.GetBytes(secretsJson);
-        var sealedBytes = EciesModule.Seal(plaintextBytes, keyPair.GetPublicKeyBytes());
-
-        var output = new StashlockEncryptedFile
-        {
-            VaultKey = vaultKey,
-            EncryptedData = Convert.ToBase64String(sealedBytes)
-        };
-
-        return JsonSerializer.Serialize(output, jsonOptions);
     }
 
     private static Dictionary<string, KeyPairModel> FindKeyFiles(string dir)

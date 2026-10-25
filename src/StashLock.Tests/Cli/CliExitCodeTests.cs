@@ -110,25 +110,4 @@ public class CliExitCodeTests : IDisposable
         return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
     }
 
-    [Theory]
-    [InlineData(1, "sops")]
-    [InlineData(2, "sops-v2")]
-    public async Task Encode_Format_WritesModeAndDecodes(int format, string mode)
-    {
-        var vault = Path.Combine(_dir, "fmt");
-        await new InitCommands(NullLogger<InitCommands>.Instance).Root(vault, "dev");
-        File.WriteAllText(Path.Combine(vault, "secrets.json"), "{\"Db\":\"x\"}");
-        Assert.Equal(ExitCodes.Ok, await new GenerateCommands(NullLogger<GenerateCommands>.Instance).Root(Path.Combine(vault, "secrets.json"), format: format));
-
-        var enc = Path.Combine(vault, "stashlock.enc.dev.secrets.json");
-        Assert.Contains($"\"mode\": \"{mode}\"", File.ReadAllText(enc));
-        Assert.Equal(ExitCodes.Ok, await new DecodeCommands(NullLogger<DecodeCommands>.Instance).Root(enc, output: Path.Combine(_dir, "out.json")));
-    }
-
-    [Fact]
-    public async Task Encode_InvalidFormat_ReturnsError()
-    {
-        var vault = Vault();
-        Assert.Equal(ExitCodes.Error, await new GenerateCommands(NullLogger<GenerateCommands>.Instance).Root(Path.Combine(vault, "secrets.json"), format: 3));
-    }
 }

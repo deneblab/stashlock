@@ -7,7 +7,6 @@ using Deneblab.StashLock.Client.Common;
 using Xunit;
 using CliSopsEncryptedFile = Deneblab.StashLock.Shared.Formats.SopsEncryptedFile;
 using CliSopsMetadata = Deneblab.StashLock.Shared.Formats.SopsMetadata;
-using CliStashlockEncryptedFile = Deneblab.StashLock.Shared.Formats.StashlockEncryptedFile;
 using CliAesGcmHelper = Deneblab.StashLock.Shared.Crypto.AesGcmHelper;
 using Deneblab.StashLock.Shared.Crypto;
 using Deneblab.StashLock.Shared.Formats;
@@ -95,29 +94,6 @@ public class ClientCliCompatibilityTests
     }
 
     [Fact]
-    public void WholeFileMode_ClientDecryptsCliEncrypted()
-    {
-        var keyPair = EciesModule.GenerateKeyPair("test");
-        var originalJson = "{\"db\":\"server=prod\",\"key\":\"abc123\"}";
-
-        // Encrypt with CLI code
-        var plaintextBytes = Encoding.UTF8.GetBytes(originalJson);
-        var sealedBytes = EciesModule.Seal(plaintextBytes, keyPair.GetPublicKeyBytes());
-        var encFile = new CliStashlockEncryptedFile
-        {
-            VaultKey = "app.test.00001",
-            EncryptedData = Convert.ToBase64String(sealedBytes)
-        };
-        var encJson = JsonSerializer.Serialize(encFile, WriteOptions);
-
-        // Decrypt with Client code
-        var decrypted = SopsDecryptor.DecryptAutoDetect(encJson, keyPair.GetPrivateKeyBytes());
-
-        Assert.Equal("server=prod", decrypted["db"]);
-        Assert.Equal("abc123", decrypted["key"]);
-    }
-
-    [Fact]
     public void SopsMode_ClientFailsWithWrongKey()
     {
         var keyPair = EciesModule.GenerateKeyPair("right");
@@ -149,32 +125,10 @@ public class ClientCliCompatibilityTests
             SopsDecryptor.DecryptAutoDetect(sopsJson, keyPair.GetPrivateKeyBytes()));
     }
 
-    // --- Helper: mirrors CLI's encode logic ---
+    // --- Helper: the same codec `stashlock encode` uses ---
 
-    private static CliSopsEncryptedFile GenerateSops(
-        Dictionary<string, string> secrets, KeyPairModel keyPair, string vaultKey)
-    {
-        var dataKey = CliAesGcmHelper.GenerateDataKey();
-        var encryptedValues = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var kvp in secrets)
-            encryptedValues[kvp.Key] = CliAesGcmHelper.EncryptValue(dataKey, kvp.Value);
+        private static CliSopsEncryptedFile GenerateSops(
+        Dictionary<string, string> secrets, KeyPairModel keyPair, string vaultKey) =>
+        SopsCodec.Encrypt(secrets, keyPair.GetPublicKeyBytes(), vaultKey);
 
-        var mac = CliAesGcmHelper.ComputeMac(dataKey, encryptedValues);
-        var macEncrypted = CliAesGcmHelper.EncryptValue(dataKey, Convert.ToBase64String(mac));
-        var wrappedDataKey = EciesModule.Seal(dataKey, keyPair.GetPublicKeyBytes());
-
-        System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
-
-        return new CliSopsEncryptedFile
-        {
-            Values = new Dictionary<string, string>(encryptedValues),
-            Metadata = new CliSopsMetadata
-            {
-                VaultKey = vaultKey,
-                Mode = "sops",
-                DataKey = Convert.ToBase64String(wrappedDataKey),
-                Mac = macEncrypted
-            }
-        };
-    }
 }

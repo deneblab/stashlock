@@ -8,7 +8,7 @@ namespace Deneblab.StashLock.Client.Common.Exceptions;
 public class DecryptionException : StashLockException
 {
     public DecryptionException()
-        : base("Failed to decrypt vault data. Possible causes: (1) incorrect password or private key, (2) corrupted data, (3) encryption mode mismatch (SOPS vs whole-file).")
+        : base("Failed to decrypt vault data. Possible causes: (1) incorrect password or private key, (2) corrupted data, (3) a file written by an older, unsupported CLI version.")
     {
     }
 

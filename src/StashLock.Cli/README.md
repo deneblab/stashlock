@@ -33,17 +33,7 @@ Generates X25519 key pairs (`stashlock.key.{tag}.json`) for each tag defined in 
 stashlock encode ./my-vault/secrets.json
 ```
 
-Reads a plaintext JSON secrets file, encrypts it with each tag's public key using sealed box encryption, and outputs encrypted files (`stashlock.enc.{tag}.secrets.json`).
-
-Two encryption modes are supported (`EncryptionMode` in `stashlock.config.json`):
-- **SOPS mode** (default) — field-level encryption with MAC verification
-- **Whole-file mode** — encrypts entire JSON as a single blob
-
-SOPS files are written in format **v2** (`"mode": "sops-v2"`). Clients from before v2 cannot read them: update your applications (`Deneblab.StashLock.Client`) first, then re-encode and publish. During the transition, `--format 1` writes the older format. `decode` and the client read both formats.
-
-```bash
-stashlock encode ./my-vault/secrets.json --format 1   # only while some apps still use an older client
-```
+Reads a plaintext JSON secrets file and writes one encrypted file per tag (`stashlock.enc.{tag}.secrets.json`). Every value is encrypted separately and the file carries a MAC (`"mode": "sops-v2"`, see [Encryption Details](#encryption-details)). Key names stay readable, so diffs show which secrets changed.
 
 ### 4. Decrypt secrets
 
@@ -155,12 +145,11 @@ config     keypairs    encrypted   uploaded      plaintext
 - **Auth Tag:** 16 bytes
 - **Output format:** ephemeral public key (32B) || nonce (12B) || ciphertext || tag (16B)
 
-SOPS mode: a random 32-byte data key encrypts the values and is itself sealed with ECIES for the tag's public key.
-
-| | v1 (`sops`) | v2 (`sops-v2`, default) |
-|---|---|---|
-| Value encryption | AES-256-GCM with the data key | AES-256-GCM with an HKDF-derived encryption key; the key path (e.g. `Db:Password`) is authenticated data, so a value cannot be moved to another key |
-| MAC | HMAC-SHA256 with the data key over concatenated keys and values | HMAC-SHA256 with a separate HKDF-derived key over length-prefixed fields, including the vault key (`box.tag.version`) |
+Encrypted file (`"mode": "sops-v2"`):
+- a random 32-byte data key, sealed with ECIES for the tag's public key (`_stashlock.dataKey`);
+- HKDF-SHA256 derives separate encryption and MAC keys from it;
+- each value is AES-256-GCM encrypted with its key path (e.g. `Db:Password`) as authenticated data, so a value cannot be moved to another key;
+- `_stashlock.mac` is HMAC-SHA256 over length-prefixed fields: the format label, the vault key (`box.tag.version`) and every key/value pair. The client also checks that the file belongs to the entry it requested.
 
 ## Environment Variables
 

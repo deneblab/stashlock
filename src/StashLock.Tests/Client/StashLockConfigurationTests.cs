@@ -201,40 +201,6 @@ public class StashLockConfigurationTests : IDisposable
     }
 
     [Fact]
-    public void AddStashLockFile_ShouldDecryptWholeFileMode()
-    {
-        // Arrange — create whole-file encrypted file using CLI code
-        var keyPair = EciesModule.GenerateKeyPair("whole-test");
-        var plainJson = JsonSerializer.Serialize(new Dictionary<string, string>
-        {
-            ["secret_key"] = "value123",
-            ["another_key"] = "value456"
-        });
-
-        var sealedBytes = EciesModule.Seal(
-            Encoding.UTF8.GetBytes(plainJson),
-            keyPair.GetPublicKeyBytes());
-
-        var encFile = new Deneblab.StashLock.Shared.Formats.StashlockEncryptedFile
-        {
-            VaultKey = "app.test.00001",
-            EncryptedData = Convert.ToBase64String(sealedBytes)
-        };
-        var encJson = JsonSerializer.Serialize(encFile, new JsonSerializerOptions { WriteIndented = true });
-        var filePath = WriteTempFile(encJson);
-        var privateKeyBase64 = Convert.ToBase64String(keyPair.GetPrivateKeyBytes());
-
-        // Act
-        var config = new ConfigurationBuilder()
-            .AddStashLock(cfg => cfg.FromEncryptedFile(filePath).WithPrivateKey(privateKeyBase64))
-            .Build();
-
-        // Assert
-        Assert.Equal("value123", config["secret_key"]);
-        Assert.Equal("value456", config["another_key"]);
-    }
-
-    [Fact]
     public void AddStashLockFile_ShouldChainWithOtherSources()
     {
         // Arrange — base config + StashLock override
@@ -263,30 +229,8 @@ public class StashLockConfigurationTests : IDisposable
     }
 
     // --- Helper: mirrors CLI's SOPS encode logic ---
-    private static CliSopsEncryptedFile GenerateSopsFile(
-        Dictionary<string, string> secrets, KeyPairModel keyPair, string vaultKey)
-    {
-        var dataKey = CliAesGcmHelper.GenerateDataKey();
-        var encryptedValues = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var kvp in secrets)
-            encryptedValues[kvp.Key] = CliAesGcmHelper.EncryptValue(dataKey, kvp.Value);
+        private static CliSopsEncryptedFile GenerateSopsFile(
+        Dictionary<string, string> secrets, KeyPairModel keyPair, string vaultKey) =>
+        SopsCodec.Encrypt(secrets, keyPair.GetPublicKeyBytes(), vaultKey);
 
-        var mac = CliAesGcmHelper.ComputeMac(dataKey, encryptedValues);
-        var macEncrypted = CliAesGcmHelper.EncryptValue(dataKey, Convert.ToBase64String(mac));
-        var wrappedDataKey = EciesModule.Seal(dataKey, keyPair.GetPublicKeyBytes());
-
-        System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
-
-        return new CliSopsEncryptedFile
-        {
-            Values = new Dictionary<string, string>(encryptedValues),
-            Metadata = new CliSopsMetadata
-            {
-                VaultKey = vaultKey,
-                Mode = "sops",
-                DataKey = Convert.ToBase64String(wrappedDataKey),
-                Mac = macEncrypted
-            }
-        };
-    }
 }
