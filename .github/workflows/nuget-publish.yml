@@ -41,7 +41,7 @@ jobs:
         run: dotnet restore src/StashLock.Client/StashLock.Client.csproj
 
       - name: Build Client
-        run: dotnet build src/StashLock.Client/StashLock.Client.csproj --configuration Release --no-restore
+        run: dotnet build src/StashLock.Client/StashLock.Client.csproj --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
 
       - name: Pack Client
         run: dotnet pack src/StashLock.Client/StashLock.Client.csproj --configuration Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ./nupkg
@@ -50,7 +50,7 @@ jobs:
         run: dotnet restore src/StashLock.Cli/StashLock.Cli.csproj
 
       - name: Build CLI
-        run: dotnet build src/StashLock.Cli/StashLock.Cli.csproj --configuration Release --no-restore
+        run: dotnet build src/StashLock.Cli/StashLock.Cli.csproj --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
 
       - name: Pack CLI
         run: dotnet pack src/StashLock.Cli/StashLock.Cli.csproj --configuration Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ./nupkg
