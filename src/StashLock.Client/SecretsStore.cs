@@ -208,7 +208,7 @@ internal class SecretsStore : ISecretsStore
     /// <summary>
     ///     Opens a secrets store from a plain JSON file (for development use only).
     ///     The file should contain a flat JSON object with key-value pairs.
-    ///     Supports comments and trailing commas using SecretsFlattenedJsonConverter.
+    ///     Supports comments and trailing commas.
     /// </summary>
     /// <param name="filePath">Path to JSON secrets file</param>
     /// <param name="cancellationToken">Cancellation token</param>
