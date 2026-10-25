@@ -9,7 +9,7 @@ public class DecryptionException : StashLockException
 {
     /// <summary>Creates the exception with a default message.</summary>
     public DecryptionException()
-        : base("Failed to decrypt vault data. Possible causes: (1) incorrect password or private key, (2) corrupted data, (3) a file written by an older, unsupported CLI version.")
+        : base("Failed to decrypt vault data. Possible causes: (1) incorrect password or private key, (2) corrupted data, (3) a file encoded for another box.tag.version.")
     {
     }
 

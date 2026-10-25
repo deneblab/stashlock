@@ -6,7 +6,7 @@ namespace Deneblab.StashLock.Client.Common;
 
 /// <summary>
 /// Reads a plain secrets JSON file into colon-separated keys ("Database:Password", "Hosts:0").
-/// Accepts the documented flat/nested form and the older { "Values": { ... } } wrapper.
+/// Accepts flat and nested objects; arrays get numeric segments.
 /// </summary>
 internal static class SecretsJson
 {
@@ -21,12 +21,6 @@ internal static class SecretsJson
         var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
             throw new JsonException("The secrets file must contain a JSON object.");
-
-        // Older format: everything under a single "Values" object
-        var props = new List<JsonProperty>(root.EnumerateObject());
-        if (props.Count == 1 && string.Equals(props[0].Name, "Values", StringComparison.OrdinalIgnoreCase)
-            && props[0].Value.ValueKind == JsonValueKind.Object)
-            root = props[0].Value;
 
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         Flatten(root, "", result);

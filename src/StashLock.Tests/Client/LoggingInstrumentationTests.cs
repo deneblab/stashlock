@@ -9,7 +9,7 @@ using Xunit;
 namespace Deneblab.StashLock.Tests.Client;
 
 /// <summary>
-/// SL-059: verifies cache instrumentation emits events AND never leaks secret
+/// Verifies cache instrumentation emits events AND never leaks secret
 /// material into log output (security regression guard).
 /// </summary>
 public class LoggingInstrumentationTests : IDisposable

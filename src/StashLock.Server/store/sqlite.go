@@ -286,13 +286,10 @@ func isExpired(entity models.KeyValueEntity) bool {
 	if !entity.ExpiresAt.Valid || entity.ExpiresAt.String == "" {
 		return false
 	}
+	// RFC3339Nano also parses times without fractional seconds
 	expiresAt, err := time.Parse(time.RFC3339Nano, entity.ExpiresAt.String)
 	if err != nil {
-		// Also try RFC3339 (without nanoseconds) for compatibility
-		expiresAt, err = time.Parse(time.RFC3339, entity.ExpiresAt.String)
-		if err != nil {
-			return false
-		}
+		return false
 	}
 	return expiresAt.Before(time.Now().UTC())
 }

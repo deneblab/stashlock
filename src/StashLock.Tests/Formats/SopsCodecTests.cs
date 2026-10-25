@@ -76,7 +76,7 @@ public class SopsCodecTests
     {
         var (pub, priv) = Keys();
         var file = SopsCodec.Encrypt(Secrets, pub, "app.dev.00001");
-        file.Metadata.Mode = "sops-v2";
+        file.Metadata.Mode = "other";
         Assert.Contains("Unsupported", Assert.Throws<CryptographicException>(() => SopsCodec.Decrypt(file, priv)).Message);
         Assert.Throws<DecryptionException>(() => SopsDecryptor.DecryptAutoDetect("{\"VaultKey\":\"a.b.c\",\"EncryptedData\":\"AAAA\"}", priv));
     }
@@ -143,11 +143,11 @@ public class CacheFormatTests : IDisposable
     }
 
     [Fact]
-    public void OldSlc1File_IsAMiss()
+    public void ForeignMagic_IsAMiss()
     {
         var path = Write("stashlock.cache.app.dev.00001.bin");
         var bytes = File.ReadAllBytes(path);
-        "SLC1"u8.ToArray().CopyTo(bytes, 0);
+        "XXXX"u8.ToArray().CopyTo(bytes, 0);
         File.WriteAllBytes(path, bytes);
         Assert.Null(SecretsCacheManager.ReadCache(path, _key, ignoreTtl: true));
     }

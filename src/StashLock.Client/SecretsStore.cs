@@ -255,7 +255,7 @@ internal class SecretsStore : ISecretsStore
 
     /// <summary>
     ///     Where <c>FromDevFile()</c> looks, in order: <c>&lt;repo root&gt;/dev/secrets/secrets.json</c>,
-    ///     then the older <c>&lt;repo root&gt;/dev/app.vs/dev/secrets/secrets.json</c>.
+    ///     then <c>&lt;app root&gt;/dev/secrets/secrets.json</c>.
     /// </summary>
     internal static string[] DevFileCandidates(string gitRoot, string appRoot)
     {
@@ -264,9 +264,9 @@ internal class SecretsStore : ISecretsStore
             list.Add(Path.Combine(gitRoot, "dev", "secrets", "secrets.json"));
         if (!string.IsNullOrEmpty(appRoot))
         {
-            var legacy = Path.Combine(appRoot, "dev", "secrets", "secrets.json");
-            if (!list.Contains(legacy))
-                list.Add(legacy);
+            var appFile = Path.Combine(appRoot, "dev", "secrets", "secrets.json");
+            if (!list.Contains(appFile))
+                list.Add(appFile);
         }
         return list.ToArray();
     }

@@ -12,9 +12,9 @@ namespace Deneblab.StashLock.Client.Common;
 /// <summary>
 /// Manages encrypted cache files for offline secret access.
 /// Cache is machine-bound via HKDF key derivation from private key + machine identity.
-/// Format SLC2: magic | createdAt | TTL | nonce | length | ciphertext | tag. The header and the
+/// Format: "SLC2" magic | createdAt | TTL | nonce | length | ciphertext | tag. The header and the
 /// cache file name (stashlock.cache.box.tag.version.bin) are AES-GCM associated data, so changing
-/// the TTL or copying the file over another entry's cache is detected. SLC1 files are ignored.
+/// the TTL or copying the file over another entry's cache is detected. Files with another magic are ignored.
 /// </summary>
 internal static class SecretsCacheManager
 {

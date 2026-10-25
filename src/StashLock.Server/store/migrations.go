@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// schemaV1 is the schema introduced with SL-061 (admin keys, API keys per box.tag).
+// schemaV1 is the initial schema.
 var schemaV1 = []string{
 	`CREATE TABLE IF NOT EXISTS KeyValues (
 		Key       TEXT PRIMARY KEY NOT NULL,
@@ -19,6 +19,8 @@ var schemaV1 = []string{
 		DeletedAt TEXT,
 		ExpiresAt TEXT
 	)`,
+	`CREATE INDEX IF NOT EXISTS IX_KeyValues_IsDeleted_DeletedAt
+		ON KeyValues (IsDeleted, DeletedAt)`,
 	`CREATE TABLE IF NOT EXISTS KeyValueHistory (
 		Id            INTEGER PRIMARY KEY AUTOINCREMENT,
 		BoxKey        TEXT NOT NULL,
@@ -44,7 +46,8 @@ var schemaV1 = []string{
 		IsActive           INTEGER NOT NULL DEFAULT 1,
 		ExpiresAt          TEXT,
 		RateLimitPerMinute INTEGER,
-		CreatedAt          TEXT NOT NULL
+		CreatedAt          TEXT NOT NULL,
+		LastUsedAt         TEXT
 	)`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS IX_ApiKeys_KeyHash
 		ON ApiKeys (KeyHash)`,
@@ -81,25 +84,13 @@ type migration struct {
 }
 
 var migrationSteps = []migration{
-	{1, "initial schema (SL-061)", func(tx *sqlx.Tx) error {
+	{1, "initial schema", func(tx *sqlx.Tx) error {
 		for _, stmt := range schemaV1 {
 			if _, err := tx.Exec(stmt); err != nil {
 				return err
 			}
 		}
 		return nil
-	}},
-	{2, "ApiKeys.LastUsedAt (SL-066)", func(tx *sqlx.Tx) error {
-		has, err := hasColumn(tx, "ApiKeys", "LastUsedAt")
-		if err != nil || has {
-			return err
-		}
-		_, err = tx.Exec("ALTER TABLE ApiKeys ADD COLUMN LastUsedAt TEXT")
-		return err
-	}},
-	{3, "index for deleted-entry retention (SL-062)", func(tx *sqlx.Tx) error {
-		_, err := tx.Exec("CREATE INDEX IF NOT EXISTS IX_KeyValues_IsDeleted_DeletedAt ON KeyValues (IsDeleted, DeletedAt)")
-		return err
 	}},
 }
 
@@ -133,29 +124,15 @@ func hasTable(q queryer, table string) (bool, error) {
 	return len(names) > 0, nil
 }
 
-// currentVersion reads SchemaVersion, or infers it for databases created before versioning.
+// currentVersion reads SchemaVersion; a database without it is new.
 func currentVersion(db *sqlx.DB) (int, error) {
 	versioned, err := hasTable(db, "SchemaVersion")
-	if err != nil {
+	if err != nil || !versioned {
 		return 0, err
 	}
-	if versioned {
-		var v int
-		err := db.Get(&v, "SELECT COALESCE(MAX(Version), 0) FROM SchemaVersion")
-		return v, err
-	}
-	hasKeys, err := hasTable(db, "ApiKeys")
-	if err != nil || !hasKeys {
-		return 0, err
-	}
-	if legacy, err := hasColumn(db, "ApiKeys", "Scopes"); err != nil {
-		return 0, err
-	} else if legacy {
-		return 0, fmt.Errorf("database was created before SL-061 (ApiKeys.Scopes) and cannot be upgraded; " +
-			"move the old database away (work/db/stashlock.sqlite*) to start fresh")
-	}
-	// Unversioned SL-061/SL-066 database: step 2 adds LastUsedAt only if it is missing
-	return 1, nil
+	var v int
+	err = db.Get(&v, "SELECT COALESCE(MAX(Version), 0) FROM SchemaVersion")
+	return v, err
 }
 
 // RunMigrations brings the database to the latest schema version.

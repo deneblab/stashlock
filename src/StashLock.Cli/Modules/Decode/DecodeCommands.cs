@@ -96,7 +96,7 @@ internal class DecodeCommands
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.Error.WriteLine("Error: Not a StashLock encrypted file (no '_stashlock' metadata).");
-            Console.Error.WriteLine("Files from older CLI versions are not supported; encode the secrets again.");
+            Console.Error.WriteLine("Encode the secrets with 'stashlock encode' first.");
             Console.ResetColor();
             return Task.FromResult(ExitCodes.Error);
         }

@@ -24,7 +24,7 @@ public class DevFileTests : System.IDisposable
     private string[] Candidates() => SecretsStore.DevFileCandidates(_repo, Path.Combine(_repo, "dev", "app.vs"));
 
     [Fact]
-    public void Candidates_DocumentedPathFirst_ThenLegacy()
+    public void Candidates_RepoRootFirst_ThenAppRoot()
     {
         var c = Candidates();
         Assert.Equal(Path.Combine(_repo, "dev", "secrets", "secrets.json"), c[0]);
@@ -40,11 +40,11 @@ public class DevFileTests : System.IDisposable
     }
 
     [Fact]
-    public async Task FallsBackToLegacyPath()
+    public async Task FallsBackToAppRoot()
     {
-        Write("dev/app.vs/dev/secrets/secrets.json", "{\"Db\":\"legacy\"}");
+        Write("dev/app.vs/dev/secrets/secrets.json", "{\"Db\":\"app\"}");
         var store = await SecretsStore.TryOpenDevFileAsync(Candidates(), CancellationToken.None);
-        Assert.Equal("legacy", store!["Db"]);
+        Assert.Equal("app", store!["Db"]);
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public class DevFileTests : System.IDisposable
     }
 
     [Fact]
-    public async Task OpenFile_AcceptsNestedArraysAndLegacyValuesWrapper()
+    public async Task OpenFile_AcceptsNestedObjectsAndArrays()
     {
         var flat = Write("a.json", "{\"Db\":{\"Password\":\"p\",\"Port\":5432},\"Hosts\":[\"h1\",\"h2\"],\"On\":true}");
         var store = await SecretsStore.OpenFileAsync(flat);
@@ -70,8 +70,5 @@ public class DevFileTests : System.IDisposable
         Assert.Equal("5432", store["Db:Port"]);
         Assert.Equal("h2", store["Hosts:1"]);
         Assert.Equal("true", store["On"]);
-
-        var wrapped = Write("b.json", "{\"Values\":{\"Db\":\"legacy\"}}");
-        Assert.Equal("legacy", (await SecretsStore.OpenFileAsync(wrapped))["Db"]);
     }
 }

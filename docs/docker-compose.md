@@ -193,7 +193,7 @@ Find the subnet with `docker network inspect traefik --format '{{(index .IPAM.Co
 
 ## Upgrades and shutdown
 
-The database schema is versioned: a new image migrates the database on start (no manual steps, no data loss). Databases from 0.4 are not supported; 0.5.0 starts with an empty database.
+The database schema is versioned: a new image migrates the database on start (no manual steps, no data loss).
 
 `docker stop` lets in-flight requests finish (up to 15 s) before the server exits.
 

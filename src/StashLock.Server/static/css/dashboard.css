@@ -1,4 +1,4 @@
-/* StashLock admin dashboard (SL-066). Light palette on :root, dark via prefers-color-scheme or data-theme. */
+/* StashLock admin dashboard. Light palette on :root, dark via prefers-color-scheme or data-theme. */
 :root{
   --bg:#f5f6fa;--surface:#ffffff;--surface-2:#eef0f6;--input:#f8f9fc;--hover:#eceef6;
   --text:#1b2030;--text-dim:#465066;--text-muted:#5b6479;

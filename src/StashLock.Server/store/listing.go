@@ -234,7 +234,7 @@ func (s *StorageService) PurgeDeleted(before time.Time) (int64, error) {
 	return n, tx.Commit()
 }
 
-// ApiStats returns the numbers served by GET /stats (response shape kept for API compatibility).
+// ApiStats returns the numbers served by GET /stats.
 func (s *StorageService) ApiStats() (*models.StatsResponse, error) {
 	nowStr := time.Now().UTC().Format(time.RFC3339Nano)
 	st := &models.StatsResponse{}
