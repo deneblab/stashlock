@@ -12,6 +12,8 @@ Versions follow [Semantic Versioning](https://semver.org/); while the major vers
 ### Removed
 
 - Whole-file encryption mode (`EncryptionMode` in `stashlock.config.json` is gone; an existing value is ignored).
+- Client package: public types `SimpleRunner`, `SimpleVersionParser` and `SimpleVersionInfo` (CLI helpers the client never used).
+- Client package: `SimpleEnv`, `SimpleEnvResult` and `SimpleAppMode` are now internal (used only inside the library).
 - SOPS v1 files (`"mode": "sops"`) and `stashlock encode --format`. There is one file format, `sops-v2`; files written by 0.5.0 builds stay readable.
 
 ## [0.5.0] — 2026-10-25

@@ -8,7 +8,7 @@ namespace Deneblab.StashLock.Client.Common.Simple;
 /// <summary>
 ///     Indicates how the application environment root is determined.
 /// </summary>
-public enum SimpleAppMode
+internal enum SimpleAppMode
 {
     Dev = 20, // Running from a git repo (your convention below)
     Test = 30, // Running under test host (dotnet test, vstest, xUnit, etc.)
@@ -23,7 +23,7 @@ public enum SimpleAppMode
 /// <summary>
 ///     Holds resolved environment information for an app.
 /// </summary>
-public sealed class SimpleEnvResult
+internal sealed class SimpleEnvResult
 {
     public SimpleEnvResult(SimpleAppMode appMode, string appRoot, string configDir, string logDir)
     {
@@ -42,7 +42,7 @@ public sealed class SimpleEnvResult
 /// <summary>
 ///     Utility for detecting app runtime environment and determining root/config/log directories.
 /// </summary>
-public static class SimpleEnv
+internal static class SimpleEnv
 {
     /// <summary>
     ///     Detects the environment and returns resolved directories.
