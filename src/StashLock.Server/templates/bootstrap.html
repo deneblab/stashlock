@@ -6,7 +6,7 @@
         <div class="alert warn"><div class="grow"><strong>This is the only time the key is shown</strong>The master key you used is now blocked. Use this admin key to sign in from now on.</div></div>
         <div class="field">
             <span class="legend" id="admin-key-label">Admin key</span>
-            <div class="code" aria-labelledby="admin-key-label"><code id="admin-key-value">{{.AdminKey}}</code><button class="icon-btn" type="button" data-copy="#admin-key-value" aria-label="Copy admin key"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg></button></div>
+            <div class="code wrap" aria-labelledby="admin-key-label"><code id="admin-key-value">{{.AdminKey}}</code><button class="icon-btn" type="button" data-copy="#admin-key-value" aria-label="Copy admin key"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg></button></div>
             <span class="hint">Store it in your password manager.</span>
         </div>
         <label class="check"><input type="checkbox" id="saved-chk" onchange="document.getElementById('continue-btn').toggleAttribute('aria-disabled',!this.checked);document.getElementById('continue-btn').classList.toggle('is-disabled',!this.checked)"><span>I have saved this key<small>Lost every admin key? Set a new STASHLOCK_MASTER_KEY and restart the server.</small></span></label>
