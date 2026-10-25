@@ -61,19 +61,19 @@ Uploads encrypted `stashlock.enc.*.json` files to the StashLock vault API. Extra
 Accepts a single file or a directory (publishes all `stashlock.enc.*.json` files found).
 
 ```bash
-# Publish all encrypted files in a directory
-stashlock publish ./my-vault
+# Publish one tag with an API key created for myapp.production
+stashlock publish ./my-vault/stashlock.enc.production.secrets.json --url https://vault.example.com --api-key slk_...
 
-# Publish with explicit API URL and key
-stashlock publish ./my-vault --url https://my-vault.example.com/api --api-key my-secret-key
+# Publish all encrypted files in a directory (each file needs a key valid for its box.tag)
+stashlock publish ./my-vault
 
 # Publish with TTL (auto-expires after 3600 seconds)
 stashlock publish ./my-vault/stashlock.enc.production.secrets.json --expires-in 3600
 ```
 
 **Options:**
-- `--url <url>` — API base URL (falls back to `STASHLOCK_API_URL` env var, then default)
-- `--api-key <key>` — API authentication key (falls back to `STASHLOCK_API_KEY` env var)
+- `--url <url>` — API base URL (falls back to `STASHLOCK_API_URL`, then `ServerUrl` in `stashlock.config.json`; required — there is no default server)
+- `--api-key <key>` — API key for the file's `box.tag` (falls back to `STASHLOCK_API_KEY`; never read from `stashlock.config.json`)
 - `--expires-in <seconds>` — TTL in seconds for the published secret
 
 ### 6. Generate connection string
@@ -92,7 +92,7 @@ stashlock cstring ./my-vault --tag production --base64
 stashlock cstring ./my-vault --tag production --env
 ```
 
-Reads `stashlock.config.json` (ServerUrl, ApiKey, Name) and `stashlock.key.{tag}.json` (PrivateKey) from the vault directory, generates a connection string in `Key=Value;Key=Value` format.
+Reads `stashlock.config.json` (ServerUrl, Name), `stashlock.key.{tag}.json` (PrivateKey) and the API key (`--api-key` or `STASHLOCK_API_KEY`), generates a connection string in `Key=Value;Key=Value` format.
 
 Output includes plain text, base64-encoded, and a copy-paste `set`/`export` command.
 
@@ -139,7 +139,7 @@ config     keypairs    encrypted   uploaded      plaintext
 |----------|---------|
 | `STASHLOCK_CONNECTION_STRING` | Full connection string (`Url=...;ApiKey=...;Box=...;Tag=...`) |
 | `STASHLOCK_API_URL` | Vault API base URL |
-| `STASHLOCK_API_KEY` | API authentication key |
+| `STASHLOCK_API_KEY` | API key for one `box.tag` (created by a StashLock admin) |
 
 ## Links
 

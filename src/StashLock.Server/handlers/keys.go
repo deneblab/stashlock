@@ -58,7 +58,8 @@ func (h *KeysHandler) ListKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	keys, err := h.apiKeyStore.List()
+	q := r.URL.Query()
+	keys, err := h.apiKeyStore.List(q.Get("box"), q.Get("tag"))
 	if err != nil {
 		middleware.WriteStashLockError(w, r, err)
 		return

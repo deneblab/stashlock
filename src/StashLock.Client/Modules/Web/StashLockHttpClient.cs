@@ -69,6 +69,14 @@ public class StashLockHttpClient : IDisposable
                 throw new VaultNotFoundException(key);
             }
 
+            if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+            {
+                _log.LogWarning("HTTP GET {Path} -> {StatusCode} ({ElapsedMs}ms)", $"/boxes/{key}", (int)response.StatusCode, sw.ElapsedMilliseconds);
+                throw new StashLockException(
+                    $"Access denied ({(int)response.StatusCode}) for key '{DescribeKey(key)}'. Use an API key created for this box.tag (STASHLOCK_API_KEY); master keys cannot read secrets.",
+                    new HttpRequestException(response.ReasonPhrase, null, response.StatusCode));
+            }
+
             response.EnsureSuccessStatusCode();
 
             _log.LogInformation("HTTP GET {Path} -> {StatusCode} ({ElapsedMs}ms)",
@@ -76,6 +84,10 @@ public class StashLockHttpClient : IDisposable
             return await response.Content.ReadAsStringAsync(cancellationToken);
         }
         catch (VaultNotFoundException)
+        {
+            throw;
+        }
+        catch (StashLockException)
         {
             throw;
         }
@@ -142,5 +154,20 @@ public class StashLockHttpClient : IDisposable
         if (_disposed) return;
         // Note: We don't dispose SharedHttpClient as it's static and shared
         _disposed = true;
+    }
+
+    // Decodes a base64url key to "box.tag.version" for readable messages.
+    private static string DescribeKey(string key)
+    {
+        try
+        {
+            var b64 = key.Replace('-', '+').Replace('_', '/');
+            b64 = b64.PadRight(b64.Length + (4 - b64.Length % 4) % 4, '=');
+            return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+        }
+        catch (FormatException)
+        {
+            return key;
+        }
     }
 }

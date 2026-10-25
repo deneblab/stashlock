@@ -24,7 +24,7 @@ func GetIdentity(r *http.Request) *models.ApiKeyIdentity {
 }
 
 // skipPaths that don't require authentication.
-var skipPaths = []string{"/healthz", "/swagger", "/admin", "/static"}
+var skipPaths = []string{"/healthz", "/admin", "/static"}
 
 func shouldSkipAuth(path string) bool {
 	if path == "/" || path == "/healthz" {
@@ -38,26 +38,11 @@ func shouldSkipAuth(path string) bool {
 	return false
 }
 
-// ApiKeyAuth creates middleware that validates Bearer tokens against the master key and DB keys.
-func ApiKeyAuth(masterKey string, apiKeyStore *store.ApiKeyStore) func(http.Handler) http.Handler {
+// ApiKeyAuth creates middleware that validates Bearer tokens against admin and box.tag keys in the database.
+// The one-time master key is never accepted here; it is exchanged for an admin key at /admin/login.
+func ApiKeyAuth(apiKeyStore *store.ApiKeyStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Open access mode — no master key configured
-			if masterKey == "" {
-				identity := &models.ApiKeyIdentity{
-					Id:       "open",
-					Name:     "Open Access",
-					IsMaster: true,
-					CanRead:  true,
-					CanWrite: true,
-					CanDelete: true,
-					Scopes:   []string{"*"},
-				}
-				ctx := context.WithValue(r.Context(), apiKeyIdentityKey, identity)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
-
 			// Skip auth for certain paths
 			if shouldSkipAuth(r.URL.Path) {
 				next.ServeHTTP(w, r)
@@ -73,22 +58,6 @@ func ApiKeyAuth(masterKey string, apiKeyStore *store.ApiKeyStore) func(http.Hand
 				return
 			}
 			token := strings.TrimSpace(authHeader[7:])
-
-			// Check master key
-			if token == masterKey {
-				identity := &models.ApiKeyIdentity{
-					Id:       "master",
-					Name:     "Master Key",
-					IsMaster: true,
-					CanRead:  true,
-					CanWrite: true,
-					CanDelete: true,
-					Scopes:   []string{"*"},
-				}
-				ctx := context.WithValue(r.Context(), apiKeyIdentityKey, identity)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
 
 			// Check database key
 			identity, err := apiKeyStore.Validate(token)

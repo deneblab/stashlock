@@ -8,7 +8,7 @@
         <tr>
             <th>Name</th>
             <th>Prefix</th>
-            <th>Scopes</th>
+            <th>Access</th>
             <th>R</th>
             <th>W</th>
             <th>D</th>
@@ -23,7 +23,7 @@
         <tr>
             <td>{{.Name}}</td>
             <td class="mono">{{.KeyPrefix}}...</td>
-            <td class="mono">{{.Scopes}}</td>
+            <td class="mono">{{if .IsAdmin}}<span class="badge badge-ok">Admin</span>{{else}}{{.Box}}.{{.Tag}}{{end}}</td>
             <td>{{if .CanRead}}<span class="badge badge-ok">R</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>
             <td>{{if .CanWrite}}<span class="badge badge-ok">W</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>
             <td>{{if .CanDelete}}<span class="badge badge-ok">D</span>{{else}}<span class="badge badge-err">-</span>{{end}}</td>

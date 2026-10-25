@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Models;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Microsoft.Extensions.Logging;
@@ -98,7 +99,7 @@ internal class KeyCommands
 
             var keyPair = EciesModule.GenerateKeyPair(tag);
             var keyJson = JsonSerializer.Serialize(keyPair, options);
-            File.WriteAllText(keyFilePath, keyJson);
+            SecureFile.WriteAllText(keyFilePath, keyJson);
 
             _log.LogInformation("Generated key file for tag {Tag} at {Path}", tag, keyFilePath);
             Console.ForegroundColor = ConsoleColor.Green;
@@ -111,6 +112,8 @@ internal class KeyCommands
         Console.WriteLine($"Key generation complete: {created} created, {skipped} skipped.");
         if (created > 0)
         {
+            if (GitIgnore.EnsureKeyFilesIgnored(targetDir))
+                Console.WriteLine($"Updated .gitignore: {GitIgnore.KeyFilePattern}");
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("WARNING: Keep key files secure. Do NOT commit them to version control.");
             Console.ResetColor();

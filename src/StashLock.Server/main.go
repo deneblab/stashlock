@@ -41,6 +41,10 @@ func main() {
 	// Setup logging (console + plain text file with rotation)
 	logging.Setup(cfg.LogDir, cfg.LogLevel)
 
+	if err := cfg.Validate(); err != nil {
+		log.Fatal().Err(err).Msg("Invalid configuration")
+	}
+
 	// Ensure work directory exists
 	dbDir := filepath.Join(cfg.WorkDir, "db")
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
@@ -64,6 +68,23 @@ func main() {
 	storage := store.NewStorageService(db, cfg.MaxValueSizeBytes())
 	apiKeyStore := store.NewApiKeyStore(db)
 	auditStore := store.NewAuditStore(db)
+
+	// Fail closed: someone must be able to administer the server
+	adminOk, err := apiKeyStore.AdminAccessAvailable(cfg.MasterKey)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to check admin keys")
+	}
+	if !adminOk {
+		log.Fatal().Msg("No way to administer the server: no active admin key, and STASHLOCK_MASTER_KEY is empty or already used. Set a new STASHLOCK_MASTER_KEY (at least 32 characters) and restart.")
+	}
+	masterKeyUnused := false
+	if cfg.MasterKey != "" {
+		consumed, err := apiKeyStore.IsMasterKeyConsumed(cfg.MasterKey)
+		if err != nil {
+			log.Fatal().Err(err).Msg("Failed to check master key")
+		}
+		masterKeyUnused = !consumed
+	}
 
 	// Create handlers
 	boxesHandler := handlers.NewBoxesHandler(storage, auditStore, cfg.Version)
@@ -95,19 +116,21 @@ func main() {
 	r.Use(mw.RequestLog)
 	r.Use(mw.SecurityHeaders)
 
-	// CORS
-	corsHandler := cors.New(cors.Options{
-		AllowedOrigins: cfg.AllowedOriginsList(),
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"*"},
-	})
-	r.Use(corsHandler.Handler)
+	// CORS — opt-in only; without STASHLOCK_ALLOWED_ORIGINS browsers get no cross-origin access
+	if origins := cfg.AllowedOriginsList(); len(origins) > 0 {
+		corsHandler := cors.New(cors.Options{
+			AllowedOrigins: origins,
+			AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders: []string{"Authorization", "Content-Type", "X-Correlation-Id"},
+		})
+		r.Use(corsHandler.Handler)
+	}
 
 	// Network access (CIDR whitelist for /admin)
-	r.Use(mw.NetworkAccess(cfg.AdminNetworks()))
+	r.Use(mw.NetworkAccess(cfg.AdminNetworks(), cfg.TrustedProxyNetworks()))
 
 	// API key auth
-	r.Use(mw.ApiKeyAuth(cfg.ApiKey, apiKeyStore))
+	r.Use(mw.ApiKeyAuth(apiKeyStore))
 
 	// Rate limiting
 	r.Use(mw.RateLimit(cfg.DefaultRateLimitPerMin))
@@ -145,19 +168,21 @@ func main() {
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(handlers.StaticFS())))
 
 	// Admin dashboard
-	dashboard := handlers.NewDashboardHandler(db, storage, apiKeyStore, auditStore, cfg.ApiKey, cfg.Version)
+	dashboard := handlers.NewDashboardHandler(db, storage, apiKeyStore, auditStore, cfg.MasterKey, cfg.Version)
 	r.Route("/admin", dashboard.Routes)
 
 	// Start server
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	hasApiKey := cfg.ApiKey != ""
 	log.Info().
 		Str("version", cfg.Version).
 		Str("addr", addr).
 		Str("workDir", cfg.WorkDir).
 		Str("logDir", cfg.LogDir).
 		Str("logLevel", cfg.LogLevel).
-		Bool("apiKeySet", hasApiKey).
+		Bool("masterKeyUnused", masterKeyUnused).
+		Strs("adminNetworks", cfg.AdminNetworks()).
+		Strs("trustedProxies", cfg.TrustedProxyNetworks()).
+		Strs("allowedOrigins", cfg.AllowedOriginsList()).
 		Msg("StashLock.ServerGo starting")
 
 	if err := http.ListenAndServe(addr, r); err != nil {

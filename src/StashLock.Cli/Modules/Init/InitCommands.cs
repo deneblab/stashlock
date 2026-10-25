@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Models;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Microsoft.Extensions.Logging;
@@ -26,19 +27,17 @@ internal class InitCommands
     /// Examples:
     ///   stashlock init ./my-vault
     ///   stashlock init ./my-vault --tags production,develop
-    ///   stashlock init ./my-vault --tags production --url https://vault.example.com --api-key mykey123
+    ///   stashlock init ./my-vault --tags production --url https://vault.example.com
     /// </summary>
     /// <param name="dir">Directory path to initialize as a StashLock vault</param>
     /// <param name="tags">-t, Comma-separated list of environment tags (e.g., production,develop)</param>
     /// <param name="url">Server URL to store in config for publish command</param>
-    /// <param name="apiKey">API key to store in config for publish command</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
     public Task Root(
         [Argument] string dir,
         string tags = "",
         string url = "",
-        string apiKey = "",
         CancellationToken cancellationToken = default)
     {
         var targetDir = Path.IsPathFullyQualified(dir)
@@ -87,8 +86,7 @@ internal class InitCommands
             Name = derivedName,
             Tags = tagList,
             EncryptionMode = "sops",
-            ServerUrl = url,
-            ApiKey = apiKey
+            ServerUrl = url
         };
 
         var options = new JsonSerializerOptions
@@ -125,7 +123,7 @@ internal class InitCommands
 
                 var keyPair = EciesModule.GenerateKeyPair(tag);
                 var keyJson = JsonSerializer.Serialize(keyPair, options);
-                File.WriteAllText(keyFilePath, keyJson);
+                SecureFile.WriteAllText(keyFilePath, keyJson);
 
                 _log.LogInformation("Generated key file for tag {Tag} at {Path}", tag, keyFilePath);
                 Console.ForegroundColor = ConsoleColor.Green;
@@ -136,10 +134,16 @@ internal class InitCommands
 
             if (created > 0)
             {
+                if (GitIgnore.EnsureKeyFilesIgnored(targetDir))
+                    Console.WriteLine($"Updated .gitignore: {GitIgnore.KeyFilePattern}");
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("WARNING: Keep key files secure. Do NOT commit them to version control.");
                 Console.ResetColor();
             }
+
+            Console.WriteLine();
+            Console.WriteLine($"Next: ask a StashLock admin for an API key per tag ({string.Join(", ", tagList.Select(t => $"{derivedName}.{t}"))})");
+            Console.WriteLine($"      and set it as {ServerSettings.ApiKeyEnvVar} for publish and your app.");
         }
         else
         {

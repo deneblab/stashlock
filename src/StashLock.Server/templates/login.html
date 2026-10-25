@@ -2,9 +2,9 @@
 <div class="login-screen">
     <div class="login-card">
         <h1>StashLock</h1>
-        <p>Enter your master API key to continue</p>
+        <p>Enter your admin key. First login: use the one-time master key (STASHLOCK_MASTER_KEY).</p>
         <form method="post" action="/admin/login">
-            <input type="password" name="apiKey" placeholder="Master API Key" autocomplete="off" autofocus>
+            <input type="password" name="apiKey" placeholder="Admin key" autocomplete="off" autofocus>
             <button type="submit" class="btn">Unlock</button>
         </form>
         {{if .ErrorMessage}}

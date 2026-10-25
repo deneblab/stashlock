@@ -19,7 +19,4 @@ public class StashlockConfig
 
     [JsonPropertyName("ServerUrl")]
     public string ServerUrl { get; set; } = string.Empty;
-
-    [JsonPropertyName("ApiKey")]
-    public string ApiKey { get; set; } = string.Empty;
 }

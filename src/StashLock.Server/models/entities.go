@@ -28,7 +28,9 @@ type ApiKeyEntity struct {
 	Name               string         `db:"Name"`
 	KeyHash            string         `db:"KeyHash"`
 	KeyPrefix          string         `db:"KeyPrefix"`
-	Scopes             string         `db:"Scopes"`
+	IsAdmin            bool           `db:"IsAdmin"`
+	Box                string         `db:"Box"`
+	Tag                string         `db:"Tag"`
 	CanRead            bool           `db:"CanRead"`
 	CanWrite           bool           `db:"CanWrite"`
 	CanDelete          bool           `db:"CanDelete"`

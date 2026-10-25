@@ -1,0 +1,14 @@
+{{define "content"}}
+<div class="login-screen">
+    <div class="login-card">
+        <h1>Your admin key</h1>
+        <p>The master key has been used and is now blocked. From now on log in with this admin key.
+           Copy it now — it will not be shown again.</p>
+        <div class="key-value">
+            <span id="admin-key-value" class="mono">{{.AdminKey}}</span>
+            <button type="button" class="btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('admin-key-value').textContent).then(function(){showToast('Copied to clipboard');})">Copy</button>
+        </div>
+        <a class="btn" href="/admin">I have saved it — continue</a>
+    </div>
+</div>
+{{end}}

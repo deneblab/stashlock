@@ -2,21 +2,27 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
 )
 
+// MinMasterKeyLength is the minimum length of the one-time master key.
+const MinMasterKeyLength = 32
+
 type Config struct {
 	Port                  int    `json:"port"`
 	WorkDir               string `json:"workDir"`
-	ApiKey                string `json:"apiKey"`
+	MasterKey             string `json:"masterKey"`
 	AllowedOrigins        string `json:"allowedOrigins"`
 	MaxValueSizeKB        int    `json:"maxValueSizeKB"`
 	MaxKeyLength          int    `json:"maxKeyLength"`
 	MaxRequestBodySizeKB  int    `json:"maxRequestBodySizeKB"`
 	DefaultRateLimitPerMin int   `json:"defaultRateLimitPerMinute"`
 	AdminAllowedNetworks  string `json:"adminAllowedNetworks"`
+	TrustedProxies        string `json:"trustedProxies"`
 	LogDir                string `json:"logDir"`
 	LogLevel              string `json:"logLevel"`
 	Version               string `json:"-"`
@@ -31,30 +37,43 @@ func (c *Config) MaxRequestBodySizeBytes() int {
 }
 
 func (c *Config) AllowedOriginsList() []string {
-	if c.AllowedOrigins == "" {
-		return nil
-	}
-	origins := strings.Split(c.AllowedOrigins, ",")
-	result := make([]string, 0, len(origins))
-	for _, o := range origins {
-		o = strings.TrimSpace(o)
-		if o != "" {
-			result = append(result, o)
-		}
-	}
-	return result
+	return splitList(c.AllowedOrigins)
 }
 
 func (c *Config) AdminNetworks() []string {
-	if c.AdminAllowedNetworks == "" {
+	return splitList(c.AdminAllowedNetworks)
+}
+
+func (c *Config) TrustedProxyNetworks() []string {
+	return splitList(c.TrustedProxies)
+}
+
+// Validate checks settings that must be correct before the server starts.
+// Whether an empty master key is acceptable depends on the database (see store.ApiKeyStore.AdminAccessAvailable).
+func (c *Config) Validate() error {
+	if c.MasterKey != "" && len(c.MasterKey) < MinMasterKeyLength {
+		return fmt.Errorf("STASHLOCK_MASTER_KEY is shorter than %d characters", MinMasterKeyLength)
+	}
+	for _, list := range [][]string{c.AdminNetworks(), c.TrustedProxyNetworks()} {
+		for _, n := range list {
+			if _, _, err := net.ParseCIDR(n); err != nil {
+				return fmt.Errorf("invalid CIDR %q: %w", n, err)
+			}
+		}
+	}
+	return nil
+}
+
+func splitList(v string) []string {
+	if v == "" {
 		return nil
 	}
-	nets := strings.Split(c.AdminAllowedNetworks, ",")
-	result := make([]string, 0, len(nets))
-	for _, n := range nets {
-		n = strings.TrimSpace(n)
-		if n != "" {
-			result = append(result, n)
+	parts := strings.Split(v, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
 		}
 	}
 	return result
@@ -90,8 +109,8 @@ func Load() *Config {
 	if v := os.Getenv("STASHLOCK_WORK_DIR"); v != "" {
 		cfg.WorkDir = v
 	}
-	if v := os.Getenv("STASHLOCK_API_KEY"); v != "" {
-		cfg.ApiKey = v
+	if v := os.Getenv("STASHLOCK_MASTER_KEY"); v != "" {
+		cfg.MasterKey = strings.TrimSpace(v)
 	}
 	if v := os.Getenv("STASHLOCK_ALLOWED_ORIGINS"); v != "" {
 		cfg.AllowedOrigins = v
@@ -108,6 +127,9 @@ func Load() *Config {
 	}
 	if v := os.Getenv("STASHLOCK_ADMIN_NETWORKS"); v != "" {
 		cfg.AdminAllowedNetworks = v
+	}
+	if v := os.Getenv("STASHLOCK_TRUSTED_PROXIES"); v != "" {
+		cfg.TrustedProxies = v
 	}
 	if v := os.Getenv("STASHLOCK_LOG_DIR"); v != "" {
 		cfg.LogDir = v

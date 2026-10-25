@@ -21,7 +21,7 @@ services:
     ports:
       - "8099:8080"
     environment:
-      - STASHLOCK_API_KEY=your-secret-api-key   # remove this line for open access
+      - STASHLOCK_MASTER_KEY=${STASHLOCK_MASTER_KEY}   # one-time key, set in .env
     volumes:
       - ./app/work:/app/work
       - ./app/log:/app/log
@@ -34,7 +34,13 @@ services:
       start_period: 10s
 ```
 
-> **Note:** Setting `STASHLOCK_API_KEY` enables authentication. All API requests must include `Authorization: Bearer your-secret-api-key`. Remove the line to run in open access mode (development only). The port `8099` on the host maps to `8080` inside the container.
+Create a `.env` file next to `docker-compose.yml` with a one-time master key of 32+ characters:
+
+```bash
+echo "STASHLOCK_MASTER_KEY=$(openssl rand -base64 32)" > .env
+```
+
+> **Note:** The server refuses to start until someone can administer it. The master key works **once**: your first login at `/admin` exchanges it for an admin key (`slk_adm_...`, shown once — save it), then the master key is blocked. Admin keys manage the server; apps and CI use API keys created per `box.tag` (see Scenario 2, step 6). The port `8099` on the host maps to `8080` inside the container.
 
 ### 2. Start the server
 
@@ -51,7 +57,7 @@ curl http://localhost:8099/
 
 ### 4. Explore the API
 
-- **Dashboard:** `http://localhost:8099/admin` (login with master API key)
+- **Dashboard:** `http://localhost:8099/admin` — first login with the master key from `.env`, then save the admin key it shows you and use that from now on
 
 ### Data persistence
 
@@ -127,24 +133,34 @@ Each tag gets its own encrypted file, sealed with that tag's public key.
 
 ### 6. Publish to the server
 
+Each API key works on one `box.tag` (here `myapp.production` and `myapp.develop`). An admin creates them in the dashboard (**API Keys → Create API Key**, Box `myapp`, Tag `production`, Read + Write) or via the API:
+
 ```bash
-stashlock publish ./my-vault --url http://localhost:8080 --api-key your-secret-api-key
+curl -X POST http://localhost:8099/keys \
+  -H "Authorization: Bearer slk_adm_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name":"myapp-production-ci","box":"myapp","tag":"production","canRead":true,"canWrite":true}'
+```
+
+Then publish the file for that tag:
+
+```bash
+stashlock publish ./my-vault/stashlock.enc.production.secrets.json --url http://localhost:8099 --api-key slk_...
 ```
 
 Output:
 ```
   stashlock.enc.production.secrets.json: Published (key: myapp.production.00001)
-  stashlock.enc.develop.secrets.json: Published (key: myapp.develop.00001)
 
-Publish complete: 2 published, 0 failed.
+Publish complete: 1 published, 0 failed.
 ```
 
-You can also set environment variables instead of passing flags:
+You can also use environment variables instead of flags (the URL may also come from `ServerUrl` in `stashlock.config.json`; the API key never does):
 
 ```bash
-export STASHLOCK_API_URL=http://localhost:8080
-export STASHLOCK_API_KEY=your-secret-api-key
-stashlock publish ./my-vault
+export STASHLOCK_API_URL=http://localhost:8099
+export STASHLOCK_API_KEY=slk_...   # API key for myapp.production
+stashlock publish ./my-vault/stashlock.enc.production.secrets.json
 ```
 
 ### 7. Verify (optional)
@@ -187,8 +203,8 @@ The application needs the private key to decrypt secrets from the server:
 
 ```bash
 export STASHLOCK_PRIVATE_KEY=<base64-encoded-private-key>
-export STASHLOCK_API_URL=http://localhost:8080
-export STASHLOCK_API_KEY=your-secret-api-key
+export STASHLOCK_API_URL=http://localhost:8099
+export STASHLOCK_API_KEY=slk_...   # read-only API key for myapp.production
 ```
 
 The private key is the `PrivateKey` value from your `stashlock.key.production.json` file.
@@ -279,7 +295,7 @@ They need the full key file to run `encode` and `publish`:
 
 ```bash
 stashlock encode ./my-vault/secrets.json
-stashlock publish ./my-vault --url http://localhost:8080 --api-key your-secret-api-key
+stashlock publish ./my-vault/stashlock.enc.production.secrets.json --url http://localhost:8099 --api-key slk_...
 ```
 
 ### For applications that only consume secrets

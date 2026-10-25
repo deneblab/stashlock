@@ -17,7 +17,6 @@ public class StashlockConfigTests
         Assert.Empty(config.Tags);
         Assert.Equal("sops", config.EncryptionMode);
         Assert.Equal(string.Empty, config.ServerUrl);
-        Assert.Equal(string.Empty, config.ApiKey);
     }
 
     [Fact]
@@ -29,8 +28,7 @@ public class StashlockConfigTests
             Name = "my-vault",
             Tags = new List<string> { "production", "staging" },
             EncryptionMode = "wholefile",
-            ServerUrl = "https://vault.example.com",
-            ApiKey = "my-secret-key"
+            ServerUrl = "https://vault.example.com"
         };
 
         var json = JsonSerializer.Serialize(original);
@@ -41,7 +39,6 @@ public class StashlockConfigTests
         Assert.Equal(original.Tags, deserialized.Tags);
         Assert.Equal(original.EncryptionMode, deserialized.EncryptionMode);
         Assert.Equal(original.ServerUrl, deserialized.ServerUrl);
-        Assert.Equal(original.ApiKey, deserialized.ApiKey);
     }
 
     [Fact]
@@ -55,7 +52,7 @@ public class StashlockConfigTests
         Assert.Contains("\"Tags\"", json);
         Assert.Contains("\"EncryptionMode\"", json);
         Assert.Contains("\"ServerUrl\"", json);
-        Assert.Contains("\"ApiKey\"", json);
+        Assert.DoesNotContain("ApiKey", json);
     }
 
     [Fact]
@@ -68,13 +65,12 @@ public class StashlockConfigTests
     }
 
     [Fact]
-    public void Deserialize_ShouldHandleMissingServerUrlAndApiKey()
+    public void Deserialize_ShouldHandleMissingServerUrl()
     {
         var json = "{\"Version\":\"00001\",\"Name\":\"test\",\"Tags\":[],\"EncryptionMode\":\"sops\"}";
         var config = JsonSerializer.Deserialize<StashlockConfig>(json)!;
 
         Assert.Equal(string.Empty, config.ServerUrl);
-        Assert.Equal(string.Empty, config.ApiKey);
     }
 
     [Fact]

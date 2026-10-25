@@ -17,7 +17,7 @@ A secure, lightweight key-value storage system (secrets vault) with a REST API, 
 
 - **Secure Storage** — URL-safe base64 encoded keys, X25519 ECIES sealed-box encryption
 - **REST API** — 17 endpoints for full secrets lifecycle management
-- **Authentication** — Bearer token auth with master key and scoped API keys
+- **Authentication** — Bearer token auth: admin master keys, and API keys bound to one `box.tag`
 - **RBAC** — Per-key read/write/delete permissions with box-level access control
 - **Rate Limiting** — Configurable per-API-key request throttling
 - **Versioning** — Automatic secret version history with rollback
@@ -49,7 +49,7 @@ stashlock init ./my-vault -tags production,develop
 stashlock keygen ./my-vault
 stashlock encode ./my-vault/secrets.json
 stashlock decode ./my-vault/stashlock.enc.production.secrets.json
-stashlock publish ./my-vault --url http://localhost:8099 --api-key YOUR_KEY
+stashlock publish ./my-vault/stashlock.enc.production.secrets.json --url http://localhost:8099 --api-key slk_...
 stashlock cstring ./my-vault --tag production          # generate connection string
 stashlock cstring ./my-vault --tag production --base64 # base64 output only
 ```
@@ -100,7 +100,7 @@ services:
     ports:
       - "8099:8080"
     environment:
-      - STASHLOCK_API_KEY=your-secret-api-key   # remove this line for open access
+      - STASHLOCK_MASTER_KEY=${STASHLOCK_MASTER_KEY}   # one-time key for the first /admin login (>= 32 chars)
     volumes:
       - ./app/work:/app/work
       - ./app/log:/app/log
@@ -165,31 +165,39 @@ curl http://localhost:8080/
 
 ## Authentication
 
-StashLock supports Bearer token authentication with two key types:
+Secrets are addressed as `<box>.<tag>.<version>` (e.g. `exampleapp.develop.00001`). Requests use `Authorization: Bearer <key>`:
 
-### Master Key
-Set via `STASHLOCK_API_KEY` environment variable or `config.json`. Has full access to all endpoints including admin operations (API key management, audit logs, stats).
+| Key | Where it comes from | Can do |
+|-----|---------------------|--------|
+| **Master key** | Server env `STASHLOCK_MASTER_KEY` | **One time only**: the first `/admin` login exchanges it for an admin key, then it is blocked. Never accepted by the API. |
+| **Admin key** (`slk_adm_...`) | Shown once after the master key exchange, or created by another admin | Administer: dashboard, `/keys`, `/audit`, `/stats`. **Cannot** read or write secrets (`/boxes` → 403). |
+| **API key** (`slk_...`) | Created by an admin; apps / CI use it as `STASHLOCK_API_KEY` | Read/write/delete secrets of exactly one `box.tag` (all versions), per its permissions. |
 
-```bash
-curl -H "Authorization: Bearer YOUR_MASTER_KEY" http://localhost:8080/boxes
-```
+### Master key (one-time)
+Set `STASHLOCK_MASTER_KEY` (at least 32 characters, e.g. `openssl rand -base64 32`) and open `/admin`. Logging in with it creates an admin key, shows it **once**, and blocks the master key for good (its hash is recorded in the database). From then on log in with the admin key. Further admins are created in the dashboard (**API Keys → Create Admin Key**); the last active admin key cannot be revoked.
 
-### Scoped API Keys
-Created via the master key. Support granular permissions:
-- **Scopes** — Restrict access to specific boxes (e.g., `app1`, `app2`) or all (`*`)
-- **Permissions** — Read, Write, Delete (independently togglable)
+The server **refuses to start** when nobody could administer it: no active admin key and no unused master key. There is no open access mode.
+
+**Lost every admin key?** Set a new value for `STASHLOCK_MASTER_KEY` and restart — a never-used master key works once again.
+
+### API keys
+Created by an admin for one `box.tag`:
+- **Box / Tag** — the key works only on `<box>.<tag>.*`; other secrets return 403
+- **Permissions** — Read, Write, Delete (default: read only)
 - **Rate Limiting** — Per-key request limits
 - **Expiration** — Optional key expiry
 
 ```bash
-# Create a scoped API key (master key required)
-curl -X POST http://localhost:8080/keys \
-  -H "Authorization: Bearer YOUR_MASTER_KEY" \
+# Create an API key for exampleapp.develop (admin key required)
+curl -X POST http://localhost:8099/keys \
+  -H "Authorization: Bearer slk_adm_..." \
   -H "Content-Type: application/json" \
-  -d '{"name":"my-service","scopes":["app1"],"canRead":true,"canWrite":true,"canDelete":false}'
+  -d '{"name":"exampleapp-ci","box":"exampleapp","tag":"develop","canRead":true,"canWrite":true}'
 ```
 
-When no master key is configured, the server runs in **open access mode** (no authentication required).
+The plaintext key (`slk_...`) is returned once. Give it to the app or CI as `STASHLOCK_API_KEY`.
+
+Typical flow: set `STASHLOCK_MASTER_KEY` → first login at `/admin` → save the admin key → create an API key per `box.tag` → app/CI uses it to publish and read.
 
 ## API Documentation
 
@@ -200,7 +208,7 @@ When no master key is configured, the server runs in **open access mode** (no au
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/` | No | Health check — returns `OK ; Version: {version}` |
-| GET | `/boxes` | Yes | List all keys (optional `?prefix=` filter) |
+| GET | `/boxes` | API key | List keys of the API key's `box.tag` (optional `?prefix=` filter) |
 | POST | `/boxes/{key}` | Yes | Store content (optional `?expiresIn=` TTL in seconds) |
 | GET | `/boxes/{key}` | Yes | Retrieve content |
 | DELETE | `/boxes/{key}` | Yes | Soft-delete a key |
@@ -209,17 +217,17 @@ When no master key is configured, the server runs in **open access mode** (no au
 | GET | `/boxes/{key}/history/{ver}` | Yes | Retrieve a specific historical version |
 | POST | `/boxes/decode` | Yes | Decode and decrypt a stored value (JSON body) |
 
-#### API Key Management (master key only)
+#### API Key Management (admin key only)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/keys` | Create a scoped API key |
-| GET | `/keys` | List all API keys |
+| POST | `/keys` | Create an API key (`name`, `box`, `tag`, `canRead`, `canWrite`, `canDelete`, `expiresAt`, `rateLimitPerMinute`) or an admin key (`name`, `isAdmin: true`) |
+| GET | `/keys` | List API keys (optional `?box=`, `?tag=`) |
 | GET | `/keys/{id}` | Get API key details |
 | DELETE | `/keys/{id}` | Revoke an API key (soft) |
 | DELETE | `/keys/{id}/permanent` | Permanently delete an API key |
 
-#### Admin (master key only)
+#### Admin (admin key only)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -277,12 +285,12 @@ A built-in web dashboard is available at `/admin` for managing the vault through
 
 **Features:**
 - Overview with key counts, storage usage, and health status
-- Browse, search, create, and delete secrets
+- Browse, search, and delete secrets (secrets are published encrypted with `stashlock publish`)
 - View key metadata and version history
-- Manage scoped API keys (create, revoke, delete)
+- Manage API keys per `box.tag` (create, revoke, delete)
 - Query audit logs with filtering
 
-Login with the master API key at `/admin`. The dashboard uses `sessionStorage` — credentials clear when the tab is closed.
+Login with an admin key at `/admin` (first time: the one-time master key). The session is an HttpOnly cookie valid for 8 hours and ends when its admin key is revoked.
 
 ## Configuration
 
@@ -296,13 +304,14 @@ The Go server reads configuration from `config.json` (optional) and environment 
 {
   "port": 8080,
   "workDir": "./work",
-  "apiKey": "your-master-api-key",
+  "masterKey": "one-time-key-at-least-32-characters-long",
   "maxValueSizeKB": 100,
   "maxKeyLength": 120,
   "maxRequestBodySizeKB": 110,
   "defaultRateLimitPerMinute": 60,
   "allowedOrigins": "https://app.example.com",
   "adminAllowedNetworks": "",
+  "trustedProxies": "",
   "logDir": "./logs",
   "logLevel": "info"
 }
@@ -312,12 +321,13 @@ The Go server reads configuration from `config.json` (optional) and environment 
 |---------|-------------|---------|-------------|
 | `port` | `STASHLOCK_PORT` | 8080 | Server listen port |
 | `workDir` | `STASHLOCK_WORK_DIR` | `./work` | Working directory (SQLite DB stored in `{workDir}/db/`) |
-| `apiKey` | `STASHLOCK_API_KEY` | *(empty)* | Master API key. Empty = open access mode |
+| `masterKey` | `STASHLOCK_MASTER_KEY` | *(empty)* | One-time key (≥ 32 chars) exchanged for an admin key at the first `/admin` login. Required until an admin key exists |
 | `maxValueSizeKB` | `STASHLOCK_MAX_VALUE_SIZE_KB` | 100 | Maximum value size in KB |
 | `maxKeyLength` | — | 120 | Maximum key length in characters |
-| `defaultRateLimitPerMinute` | `STASHLOCK_DEFAULT_RATE_LIMIT` | 60 | Default rate limit for scoped keys |
-| `allowedOrigins` | `STASHLOCK_ALLOWED_ORIGINS` | *(empty)* | Comma-separated CORS origins. Empty = allow all |
-| `adminAllowedNetworks` | `STASHLOCK_ADMIN_NETWORKS` | *(empty)* | CIDR whitelist for admin endpoints |
+| `defaultRateLimitPerMinute` | `STASHLOCK_DEFAULT_RATE_LIMIT` | 60 | Default rate limit for API keys |
+| `allowedOrigins` | `STASHLOCK_ALLOWED_ORIGINS` | *(empty)* | Comma-separated CORS origins. Empty = CORS disabled (browsers cannot call the API cross-origin) |
+| `adminAllowedNetworks` | `STASHLOCK_ADMIN_NETWORKS` | *(empty)* | CIDR whitelist for `/admin`. Empty = any address (login still required) |
+| `trustedProxies` | `STASHLOCK_TRUSTED_PROXIES` | *(empty)* | CIDRs of reverse proxies whose `X-Forwarded-For` is trusted. Empty = always use the connection address |
 | `logDir` | `STASHLOCK_LOG_DIR` | `./logs` | Log file directory |
 | `logLevel` | `STASHLOCK_LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
 
@@ -360,10 +370,11 @@ Data is stored in bind-mounted directories:
 |----------|-------------|
 | `STASHLOCK_PORT` | Server listen port (default: 8080) |
 | `STASHLOCK_WORK_DIR` | Working directory for data (default: `./work`) |
-| `STASHLOCK_API_KEY` | Master API key for Bearer token auth |
-| `STASHLOCK_DEFAULT_RATE_LIMIT` | Rate limit for scoped API keys (per minute) |
-| `STASHLOCK_ALLOWED_ORIGINS` | Comma-separated CORS origins |
-| `STASHLOCK_ADMIN_NETWORKS` | CIDR whitelist for admin endpoints |
+| `STASHLOCK_MASTER_KEY` | One-time master key (≥ 32 chars) for the first `/admin` login |
+| `STASHLOCK_DEFAULT_RATE_LIMIT` | Rate limit for API keys (per minute) |
+| `STASHLOCK_ALLOWED_ORIGINS` | Comma-separated CORS origins (empty = CORS disabled) |
+| `STASHLOCK_ADMIN_NETWORKS` | CIDR whitelist for `/admin` |
+| `STASHLOCK_TRUSTED_PROXIES` | CIDRs of trusted reverse proxies (for `X-Forwarded-For`) |
 | `STASHLOCK_LOG_DIR` | Log file directory (default: `./logs`) |
 | `STASHLOCK_LOG_LEVEL` | Log level: debug, info, warn, error |
 
@@ -379,7 +390,7 @@ docker build -t stashlock-server:latest .
 ```bash
 docker run -d \
   -p 8099:8080 \
-  -e STASHLOCK_API_KEY=your-secret-key \
+  -e STASHLOCK_MASTER_KEY="$(openssl rand -base64 32)" \
   -v ./app/work:/app/work \
   -v ./app/log:/app/log \
   --name stashlock-server \
@@ -454,8 +465,8 @@ Images and packages are tagged with:
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| **401 Unauthorized** | Missing or invalid API key | Check `Authorization: Bearer <key>` header. Verify the key matches `STASHLOCK_API_KEY` or a valid scoped key. |
-| **403 Forbidden** | Key lacks required permission or scope | Update the API key's permissions (read/write/delete) or scopes in the dashboard. Use `*` scope for unrestricted access. |
+| **401 Unauthorized** | Missing, invalid, revoked or expired key (the master key is never accepted by the API) | Check the `Authorization: Bearer <key>` header and the key's status in the dashboard. |
+| **403 Forbidden** | Admin key used on `/boxes`, API key used on another `box.tag`, or missing permission | Use an API key created for the secret's `box.tag` with the needed read/write/delete permission. |
 | **404 Key Not Found** | Key doesn't exist or has been deleted | Use `GET /boxes?prefix=<box>` to list available keys. Check for typos in the `box.tag.version` format. |
 | **429 Too Many Requests** | Rate limit exceeded | Wait and retry after the `Retry-After` header value (seconds). Increase the key's rate limit in the dashboard. |
 | **Decryption failed** | Wrong private key, corrupted data, or mode mismatch | Verify the private key matches the public key used for encryption. Confirm encryption mode (SOPS vs whole-file) is consistent. |

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Models;
 using Microsoft.Extensions.Logging;
 
@@ -12,8 +13,6 @@ namespace Deneblab.StashLock.Cli.Modules.Publish;
 
 internal class PublishCommands
 {
-    private const string DefaultApiUrl = "https://deneblabvault.azurewebsites.net/api/";
-
     private readonly ILogger<PublishCommands> _log;
 
     public PublishCommands(ILogger<PublishCommands> log)
@@ -31,8 +30,8 @@ internal class PublishCommands
     ///   stashlock publish ./my-vault --verbose --expires-in 3600
     /// </summary>
     /// <param name="path">Path to stashlock.enc.*.json file or directory containing them</param>
-    /// <param name="url">API base URL (falls back to STASHLOCK_API_URL env var)</param>
-    /// <param name="apiKey">API authentication key (falls back to STASHLOCK_API_KEY env var)</param>
+    /// <param name="url">API base URL (falls back to STASHLOCK_API_URL env var, then ServerUrl in stashlock.config.json)</param>
+    /// <param name="apiKey">API key for the box.tag (falls back to STASHLOCK_API_KEY env var)</param>
     /// <param name="expiresIn">TTL in seconds for the published secret</param>
     /// <param name="verbose">Show resolved configuration before publishing</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -77,28 +76,27 @@ internal class PublishCommands
         var configDir = File.Exists(fullPath) ? Path.GetDirectoryName(fullPath)! : fullPath;
         var config = LoadConfig(configDir);
 
-        // Resolve API URL: flag > config > env var > default
-        var apiUrl = !string.IsNullOrEmpty(url) ? url
-            : !string.IsNullOrEmpty(config?.ServerUrl) ? config.ServerUrl
-            : Environment.GetEnvironmentVariable("STASHLOCK_API_URL") ?? DefaultApiUrl;
-
-        // Resolve API key: flag > config > env var
-        var resolvedApiKey = !string.IsNullOrEmpty(apiKey) ? apiKey
-            : !string.IsNullOrEmpty(config?.ApiKey) ? config.ApiKey
-            : Environment.GetEnvironmentVariable("STASHLOCK_API_KEY");
-
-        if (string.IsNullOrEmpty(resolvedApiKey))
+        // Resolve API URL: flag > env var > config
+        var apiUrl = ServerSettings.ResolveUrl(url, config);
+        if (apiUrl == null)
         {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Warning: No API key provided. Use --api-key or set STASHLOCK_API_KEY.");
-            Console.ResetColor();
+            PrintError($"Error: No server URL. Use --url, set {ServerSettings.UrlEnvVar}, or add ServerUrl to stashlock.config.json.");
+            return;
+        }
+
+        // Resolve API key: flag > env var (never from the config file)
+        var resolvedApiKey = ServerSettings.ResolveApiKey(apiKey);
+        if (resolvedApiKey == null)
+        {
+            PrintError($"Error: No API key. Use --api-key or set {ServerSettings.ApiKeyEnvVar} (an API key created for the box.tag).");
+            return;
         }
 
         if (verbose)
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.WriteLine($"  API URL:    {apiUrl}");
-            Console.WriteLine($"  API Key:    {(string.IsNullOrEmpty(resolvedApiKey) ? "(none)" : resolvedApiKey[..Math.Min(8, resolvedApiKey.Length)] + "...")}");
+            Console.WriteLine($"  API Key:    {resolvedApiKey[..Math.Min(8, resolvedApiKey.Length)]}...");
             Console.WriteLine($"  Config:     {(config != null ? Path.Combine(configDir, "stashlock.config.json") : "(not found)")}");
             Console.WriteLine($"  Files:      {files.Length}");
             if (expiresIn.HasValue)

@@ -35,9 +35,9 @@ func RateLimit(defaultLimitPerMin int) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip for health/swagger/admin paths
+			// Skip for health/admin/static paths
 			path := r.URL.Path
-			if path == "/" || path == "/healthz" || strings.HasPrefix(path, "/swagger") || strings.HasPrefix(path, "/admin") || strings.HasPrefix(path, "/static") {
+			if path == "/" || path == "/healthz" || strings.HasPrefix(path, "/admin") || strings.HasPrefix(path, "/static") {
 				next.ServeHTTP(w, r)
 				return
 			}

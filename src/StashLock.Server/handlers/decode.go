@@ -52,7 +52,7 @@ func (h *DecodeHandler) DecodeBox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !requirePermission(w, r, "read", key.Box) {
+	if !requirePermission(w, r, "read", key) {
 		return
 	}
 

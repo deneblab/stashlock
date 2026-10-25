@@ -2,13 +2,16 @@ services:
   stashlock-server:
     image: ghcr.io/deneblab/stashlock-server:latest
     container_name: stashlock-server
-    user: "1654:1654"
     ports:
       - "8099:8080"
     environment:
-      - StashLock__ApiKey=${API_KEY}
-      # - StashLock__AdminAllowedNetworks=100.64.0.0/10   # uncomment to restrict admin to Tailscale
-      - UMASK=002
+      # One-time master key (>= 32 chars, e.g. `openssl rand -base64 32`): first /admin login exchanges it
+      # for an admin key and blocks it. Set a new value and restart to recover admin access.
+      - STASHLOCK_MASTER_KEY=${STASHLOCK_MASTER_KEY:-}
+      - STASHLOCK_LOG_DIR=/app/log
+      # - STASHLOCK_ADMIN_NETWORKS=100.64.0.0/10      # restrict /admin, e.g. to Tailscale
+      # - STASHLOCK_TRUSTED_PROXIES=172.18.0.0/16     # honour X-Forwarded-For only from these proxies
+      # - STASHLOCK_ALLOWED_ORIGINS=https://app.example.com   # enable CORS for browser clients
     volumes:
       - ./app/work:/app/work
       - ./app/log:/app/log

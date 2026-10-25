@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,7 +29,9 @@ type ApiKeyInfo struct {
 	Id                 string  `json:"id"`
 	Name               string  `json:"name"`
 	KeyPrefix          string  `json:"keyPrefix"`
-	Scopes             string  `json:"scopes"`
+	IsAdmin            bool    `json:"isAdmin"`
+	Box                string  `json:"box,omitempty"`
+	Tag                string  `json:"tag,omitempty"`
 	CanRead            bool    `json:"canRead"`
 	CanWrite           bool    `json:"canWrite"`
 	CanDelete          bool    `json:"canDelete"`
@@ -40,13 +43,31 @@ type ApiKeyInfo struct {
 
 // CreateApiKeyRequest is the request body for creating a new API key.
 type CreateApiKeyRequest struct {
-	Name               string   `json:"name"`
-	Scopes             []string `json:"scopes"`
-	CanRead            *bool    `json:"canRead"`
-	CanWrite           *bool    `json:"canWrite"`
-	CanDelete          *bool    `json:"canDelete"`
-	ExpiresAt          *string  `json:"expiresAt,omitempty"`
-	RateLimitPerMinute *int     `json:"rateLimitPerMinute,omitempty"`
+	Name               string  `json:"name"`
+	IsAdmin            bool    `json:"isAdmin"`
+	Box                string  `json:"box"`
+	Tag                string  `json:"tag"`
+	CanRead            *bool   `json:"canRead"`
+	CanWrite           *bool   `json:"canWrite"`
+	CanDelete          *bool   `json:"canDelete"`
+	ExpiresAt          *string `json:"expiresAt,omitempty"`
+	RateLimitPerMinute *int    `json:"rateLimitPerMinute,omitempty"`
+}
+
+// boxTagPattern restricts box and tag names bound to API keys (no dots: they separate box.tag.version).
+var boxTagPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// ValidateBoxTag checks that box and tag are usable as an API key binding.
+func ValidateBoxTag(box, tag string) error {
+	if !boxTagPattern.MatchString(box) {
+		return models.NewStashLockError(models.ErrorCodes.InvalidKeyFormat,
+			"box must be 1-64 characters: letters, digits, '-' or '_'", 400)
+	}
+	if !boxTagPattern.MatchString(tag) {
+		return models.NewStashLockError(models.ErrorCodes.InvalidKeyFormat,
+			"tag must be 1-64 characters: letters, digits, '-' or '_'", 400)
+	}
+	return nil
 }
 
 // CreateApiKeyResponse includes the key info and the plaintext key (shown only once).
@@ -54,6 +75,9 @@ type CreateApiKeyResponse struct {
 	Info ApiKeyInfo `json:"info"`
 	Key  string     `json:"key"`
 }
+
+// AdminKeyPrefix marks admin keys so they are easy to tell apart from box.tag API keys.
+const AdminKeyPrefix = "slk_adm_"
 
 // GenerateKey creates a random API key with the slk_ prefix.
 func GenerateKey() (string, error) {
@@ -81,27 +105,43 @@ func (s *ApiKeyStore) Create(req CreateApiKeyRequest) (*CreateApiKeyResponse, er
 	if req.Name == "" {
 		return nil, models.NewStashLockError(models.ErrorCodes.MissingRequiredFields, "Name is required", 400)
 	}
+	return s.create(s.db, req)
+}
+
+// execer is satisfied by *sqlx.DB and *sqlx.Tx.
+type execer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
+func (s *ApiKeyStore) create(db execer, req CreateApiKeyRequest) (*CreateApiKeyResponse, error) {
+	if req.IsAdmin {
+		// Admin keys administer the server; they are not bound to a box.tag and cannot touch secrets
+		req.Box, req.Tag = "", ""
+		f := false
+		req.CanRead, req.CanWrite, req.CanDelete = &f, &f, &f
+	} else if err := ValidateBoxTag(req.Box, req.Tag); err != nil {
+		return nil, err
+	}
 
 	plainKey, err := GenerateKey()
 	if err != nil {
 		return nil, fmt.Errorf("generate key: %w", err)
 	}
+	keyPrefix := plainKey[:8]
+	if req.IsAdmin {
+		plainKey = AdminKeyPrefix + strings.TrimPrefix(plainKey, "slk_")
+		keyPrefix = plainKey[:12]
+	}
 
 	keyHash := HashKey(plainKey)
-	keyPrefix := plainKey[:8]
 	id := uuid.New().String()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-
-	scopes := "*"
-	if len(req.Scopes) > 0 {
-		scopes = strings.Join(req.Scopes, ",")
-	}
 
 	canRead := true
 	if req.CanRead != nil {
 		canRead = *req.CanRead
 	}
-	canWrite := true
+	canWrite := false
 	if req.CanWrite != nil {
 		canWrite = *req.CanWrite
 	}
@@ -110,9 +150,9 @@ func (s *ApiKeyStore) Create(req CreateApiKeyRequest) (*CreateApiKeyResponse, er
 		canDelete = *req.CanDelete
 	}
 
-	_, err = s.db.Exec(`INSERT INTO ApiKeys (Id, Name, KeyHash, KeyPrefix, Scopes, CanRead, CanWrite, CanDelete, IsActive, ExpiresAt, RateLimitPerMinute, CreatedAt)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-		id, req.Name, keyHash, keyPrefix, scopes,
+	_, err = db.Exec(`INSERT INTO ApiKeys (Id, Name, KeyHash, KeyPrefix, IsAdmin, Box, Tag, CanRead, CanWrite, CanDelete, IsActive, ExpiresAt, RateLimitPerMinute, CreatedAt)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+		id, req.Name, keyHash, keyPrefix, boolToInt(req.IsAdmin), req.Box, req.Tag,
 		boolToInt(canRead), boolToInt(canWrite), boolToInt(canDelete),
 		nullStr(req.ExpiresAt), nullInt(req.RateLimitPerMinute), now,
 	)
@@ -124,7 +164,9 @@ func (s *ApiKeyStore) Create(req CreateApiKeyRequest) (*CreateApiKeyResponse, er
 		Id:                 id,
 		Name:               req.Name,
 		KeyPrefix:          keyPrefix,
-		Scopes:             scopes,
+		IsAdmin:            req.IsAdmin,
+		Box:                req.Box,
+		Tag:                req.Tag,
 		CanRead:            canRead,
 		CanWrite:           canWrite,
 		CanDelete:          canDelete,
@@ -137,10 +179,22 @@ func (s *ApiKeyStore) Create(req CreateApiKeyRequest) (*CreateApiKeyResponse, er
 	return &CreateApiKeyResponse{Info: info, Key: plainKey}, nil
 }
 
-// List returns all API keys (sorted by name).
-func (s *ApiKeyStore) List() ([]ApiKeyInfo, error) {
+// List returns API keys sorted by box, tag and name; empty box/tag means no filter.
+func (s *ApiKeyStore) List(box, tag string) ([]ApiKeyInfo, error) {
+	query := "SELECT * FROM ApiKeys WHERE 1=1"
+	var args []interface{}
+	if box != "" {
+		query += " AND Box = ?"
+		args = append(args, box)
+	}
+	if tag != "" {
+		query += " AND Tag = ?"
+		args = append(args, tag)
+	}
+	query += " ORDER BY IsAdmin DESC, Box, Tag, Name"
+
 	var entities []models.ApiKeyEntity
-	err := s.db.Select(&entities, "SELECT * FROM ApiKeys ORDER BY Name")
+	err := s.db.Select(&entities, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
@@ -168,6 +222,9 @@ func (s *ApiKeyStore) Get(id string) (*ApiKeyInfo, error) {
 
 // Revoke soft-disables an API key (IsActive = false).
 func (s *ApiKeyStore) Revoke(id string) error {
+	if err := s.ensureNotLastAdmin(id); err != nil {
+		return err
+	}
 	result, err := s.db.Exec("UPDATE ApiKeys SET IsActive = 0 WHERE Id = ?", id)
 	if err != nil {
 		return fmt.Errorf("revoke api key: %w", err)
@@ -181,6 +238,9 @@ func (s *ApiKeyStore) Revoke(id string) error {
 
 // Delete permanently removes an API key.
 func (s *ApiKeyStore) Delete(id string) error {
+	if err := s.ensureNotLastAdmin(id); err != nil {
+		return err
+	}
 	result, err := s.db.Exec("DELETE FROM ApiKeys WHERE Id = ?", id)
 	if err != nil {
 		return fmt.Errorf("delete api key: %w", err)
@@ -217,15 +277,14 @@ func (s *ApiKeyStore) Validate(token string) (*models.ApiKeyIdentity, error) {
 		}
 	}
 
-	scopes := strings.Split(entity.Scopes, ",")
-
 	identity := &models.ApiKeyIdentity{
-		Id:       entity.Id,
-		Name:     entity.Name,
-		IsMaster: false,
-		Scopes:   scopes,
-		CanRead:  entity.CanRead,
-		CanWrite: entity.CanWrite,
+		Id:        entity.Id,
+		Name:      entity.Name,
+		IsMaster:  entity.IsAdmin,
+		Box:       entity.Box,
+		Tag:       entity.Tag,
+		CanRead:   entity.CanRead,
+		CanWrite:  entity.CanWrite,
 		CanDelete: entity.CanDelete,
 	}
 
@@ -237,12 +296,97 @@ func (s *ApiKeyStore) Validate(token string) (*models.ApiKeyIdentity, error) {
 	return identity, nil
 }
 
+// ensureNotLastAdmin refuses to disable the only remaining active admin key.
+func (s *ApiKeyStore) ensureNotLastAdmin(id string) error {
+	var isAdmin bool
+	err := s.db.Get(&isAdmin, "SELECT IsAdmin FROM ApiKeys WHERE Id = ? AND IsActive = 1", id)
+	if err == sql.ErrNoRows || (err == nil && !isAdmin) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("check admin key: %w", err)
+	}
+	var others int
+	if err := s.db.Get(&others, "SELECT COUNT(*) FROM ApiKeys WHERE IsAdmin = 1 AND IsActive = 1 AND Id <> ?", id); err != nil {
+		return fmt.Errorf("count admin keys: %w", err)
+	}
+	if others == 0 {
+		return models.NewStashLockError(models.ErrorCodes.Forbidden,
+			"Cannot remove the last active admin key; create another admin key first", 409)
+	}
+	return nil
+}
+
+// HasActiveAdmin reports whether at least one active admin key exists.
+func (s *ApiKeyStore) HasActiveAdmin() (bool, error) {
+	var n int
+	if err := s.db.Get(&n, "SELECT COUNT(*) FROM ApiKeys WHERE IsAdmin = 1 AND IsActive = 1"); err != nil {
+		return false, fmt.Errorf("count admin keys: %w", err)
+	}
+	return n > 0, nil
+}
+
+// IsMasterKeyConsumed reports whether the one-time master key was already exchanged.
+func (s *ApiKeyStore) IsMasterKeyConsumed(masterKey string) (bool, error) {
+	var n int
+	if err := s.db.Get(&n, "SELECT COUNT(*) FROM ConsumedMasterKeys WHERE KeyHash = ?", HashKey(masterKey)); err != nil {
+		return false, fmt.Errorf("check master key: %w", err)
+	}
+	return n > 0, nil
+}
+
+// AdminAccessAvailable reports whether anyone can still administer the server:
+// an active admin key exists, or the configured master key has not been used yet.
+func (s *ApiKeyStore) AdminAccessAvailable(masterKey string) (bool, error) {
+	if ok, err := s.HasActiveAdmin(); err != nil || ok {
+		return ok, err
+	}
+	if masterKey == "" {
+		return false, nil
+	}
+	consumed, err := s.IsMasterKeyConsumed(masterKey)
+	return !consumed, err
+}
+
+// ErrMasterKeyConsumed is returned when the one-time master key was already exchanged.
+var ErrMasterKeyConsumed = models.NewStashLockError(models.ErrorCodes.Unauthorized,
+	"The master key has already been used. Log in with your admin key, or set a new STASHLOCK_MASTER_KEY and restart.", 401)
+
+// ConsumeMasterKey exchanges the one-time master key for a new admin key, atomically.
+// The caller must have verified that the key matches the configured master key.
+func (s *ApiKeyStore) ConsumeMasterKey(masterKey, adminName string) (*CreateApiKeyResponse, error) {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	resp, err := s.create(tx, CreateApiKeyRequest{Name: adminName, IsAdmin: true})
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec("INSERT INTO ConsumedMasterKeys (KeyHash, AdminKeyId, ConsumedAt) VALUES (?, ?, ?)",
+		HashKey(masterKey), resp.Info.Id, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "PRIMARY KEY") {
+			return nil, ErrMasterKeyConsumed
+		}
+		return nil, fmt.Errorf("record master key use: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return resp, nil
+}
+
 func entityToInfo(e models.ApiKeyEntity) ApiKeyInfo {
 	info := ApiKeyInfo{
 		Id:        e.Id,
 		Name:      e.Name,
 		KeyPrefix: e.KeyPrefix,
-		Scopes:    e.Scopes,
+		IsAdmin:   e.IsAdmin,
+		Box:       e.Box,
+		Tag:       e.Tag,
 		CanRead:   e.CanRead,
 		CanWrite:  e.CanWrite,
 		CanDelete: e.CanDelete,

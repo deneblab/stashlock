@@ -1,28 +1,29 @@
 package models
 
-import "strings"
-
 // ApiKeyIdentity represents the authenticated principal for a request.
+// Master identities administer the server; API key identities are bound to one box.tag.
 type ApiKeyIdentity struct {
-	Id                 string   `json:"id"`
-	Name               string   `json:"name"`
-	IsMaster           bool     `json:"isMaster"`
-	Scopes             []string `json:"scopes"`
-	CanRead            bool     `json:"canRead"`
-	CanWrite           bool     `json:"canWrite"`
-	CanDelete          bool     `json:"canDelete"`
-	RateLimitPerMinute *int     `json:"rateLimitPerMinute,omitempty"`
+	Id                 string `json:"id"`
+	Name               string `json:"name"`
+	IsMaster           bool   `json:"isMaster"`
+	Box                string `json:"box,omitempty"`
+	Tag                string `json:"tag,omitempty"`
+	CanRead            bool   `json:"canRead"`
+	CanWrite           bool   `json:"canWrite"`
+	CanDelete          bool   `json:"canDelete"`
+	RateLimitPerMinute *int   `json:"rateLimitPerMinute,omitempty"`
 }
 
-// HasScopeFor checks whether this identity has access to the given box name.
-func (id *ApiKeyIdentity) HasScopeFor(boxName string) bool {
+// CanAccess reports whether this API key identity may access the given key.
+// Master identities never access secrets directly.
+func (id *ApiKeyIdentity) CanAccess(key *KeyStore) bool {
 	if id.IsMaster {
-		return true
+		return false
 	}
-	for _, s := range id.Scopes {
-		if s == "*" || strings.EqualFold(s, boxName) {
-			return true
-		}
-	}
-	return false
+	return id.Box == key.Box && id.Tag == key.Tag
+}
+
+// KeyPrefix returns the "box.tag." prefix this identity is bound to.
+func (id *ApiKeyIdentity) KeyPrefix() string {
+	return id.Box + "." + id.Tag + "."
 }

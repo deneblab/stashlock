@@ -31,9 +31,11 @@ var migrations = []string{
 		Name               TEXT NOT NULL,
 		KeyHash            TEXT NOT NULL,
 		KeyPrefix          TEXT NOT NULL,
-		Scopes             TEXT NOT NULL DEFAULT '*',
+		IsAdmin            INTEGER NOT NULL DEFAULT 0,
+		Box                TEXT NOT NULL DEFAULT '',
+		Tag                TEXT NOT NULL DEFAULT '',
 		CanRead            INTEGER NOT NULL DEFAULT 1,
-		CanWrite           INTEGER NOT NULL DEFAULT 1,
+		CanWrite           INTEGER NOT NULL DEFAULT 0,
 		CanDelete          INTEGER NOT NULL DEFAULT 0,
 		IsActive           INTEGER NOT NULL DEFAULT 1,
 		ExpiresAt          TEXT,
@@ -42,6 +44,13 @@ var migrations = []string{
 	)`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS IX_ApiKeys_KeyHash
 		ON ApiKeys (KeyHash)`,
+	`CREATE INDEX IF NOT EXISTS IX_ApiKeys_Box_Tag
+		ON ApiKeys (Box, Tag)`,
+	`CREATE TABLE IF NOT EXISTS ConsumedMasterKeys (
+		KeyHash    TEXT PRIMARY KEY NOT NULL,
+		AdminKeyId TEXT NOT NULL,
+		ConsumedAt TEXT NOT NULL
+	)`,
 	`CREATE TABLE IF NOT EXISTS AuditLogs (
 		Id            INTEGER PRIMARY KEY AUTOINCREMENT,
 		Action        TEXT NOT NULL,

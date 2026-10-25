@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/deneblab/stashlock-servergo/middleware"
@@ -14,12 +15,21 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// requirePermission checks that the identity has the given permission, optionally scoped to a box.
-func requirePermission(w http.ResponseWriter, r *http.Request, permission string, box string) bool {
+// requirePermission checks that the caller is an API key with the given permission on the key's box.tag.
+// Master keys administer the server and are always refused here. A nil key checks the permission only.
+func requirePermission(w http.ResponseWriter, r *http.Request, permission string, key *models.KeyStore) bool {
 	identity := middleware.GetIdentity(r)
 	if identity == nil {
-		// Open access mode
-		return true
+		middleware.WriteStashLockError(w, r, models.NewStashLockError(
+			models.ErrorCodes.Unauthorized, "Authentication required", 401))
+		return false
+	}
+
+	if identity.IsMaster {
+		middleware.WriteStashLockError(w, r, models.NewStashLockError(
+			models.ErrorCodes.Forbidden,
+			"Master keys are for administration only; use an API key created for the box.tag", 403))
+		return false
 	}
 
 	var allowed bool
@@ -39,14 +49,28 @@ func requirePermission(w http.ResponseWriter, r *http.Request, permission string
 		return false
 	}
 
-	if box != "" && !identity.HasScopeFor(box) {
+	if key != nil && !identity.CanAccess(key) {
 		middleware.WriteStashLockError(w, r, models.NewStashLockError(
 			models.ErrorCodes.Forbidden,
-			fmt.Sprintf("API key does not have access to box '%s'", box), 403))
+			fmt.Sprintf("API key is not valid for '%s.%s'", key.Box, key.Tag), 403))
 		return false
 	}
 
 	return true
+}
+
+// scopedPrefix narrows a requested list prefix to the identity's box.tag.
+// Returns false when the requested prefix lies outside it.
+func scopedPrefix(identity *models.ApiKeyIdentity, requested string) (string, bool) {
+	own := identity.KeyPrefix()
+	switch {
+	case requested == "" || strings.HasPrefix(own, requested):
+		return own, true
+	case strings.HasPrefix(requested, own):
+		return requested, true
+	default:
+		return "", false
+	}
 }
 
 type BoxesHandler struct {
@@ -68,14 +92,14 @@ func (h *BoxesHandler) GetRoot(w http.ResponseWriter, r *http.Request) {
 
 // ListBoxes handles GET /boxes
 func (h *BoxesHandler) ListBoxes(w http.ResponseWriter, r *http.Request) {
-	if !requirePermission(w, r, "read", "") {
+	if !requirePermission(w, r, "read", nil) {
 		return
 	}
 
-	prefix := r.URL.Query().Get("prefix")
-	var prefixPtr *string
-	if prefix != "" {
-		prefixPtr = &prefix
+	prefix, ok := scopedPrefix(middleware.GetIdentity(r), r.URL.Query().Get("prefix"))
+	if !ok {
+		writeJSON(w, http.StatusOK, []models.KeyEntry{})
+		return
 	}
 
 	limit := 100
@@ -91,7 +115,7 @@ func (h *BoxesHandler) ListBoxes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	keys, err := h.storage.ListKeys(prefixPtr, limit, offset)
+	keys, err := h.storage.ListKeys(&prefix, limit, offset)
 	if err != nil {
 		middleware.WriteStashLockError(w, r, err)
 		return
@@ -116,7 +140,7 @@ func (h *BoxesHandler) SetBox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !requirePermission(w, r, "write", key.Box) {
+	if !requirePermission(w, r, "write", key) {
 		return
 	}
 
@@ -165,7 +189,7 @@ func (h *BoxesHandler) GetBox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !requirePermission(w, r, "read", key.Box) {
+	if !requirePermission(w, r, "read", key) {
 		return
 	}
 
@@ -178,7 +202,7 @@ func (h *BoxesHandler) GetBox(w http.ResponseWriter, r *http.Request) {
 	if value == "" {
 		middleware.WriteStashLockError(w, r, models.NewStashLockError(
 			models.ErrorCodes.KeyNotFound,
-			fmt.Sprintf("Key not found: %s. Use GET /boxes?prefix=%s to list available keys.", key.FullAddress(), key.Box),
+			fmt.Sprintf("Key not found: %s. Use GET /boxes to list available keys.", key.FullAddress()),
 			404))
 		return
 	}
@@ -199,7 +223,7 @@ func (h *BoxesHandler) DeleteBox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !requirePermission(w, r, "delete", key.Box) {
+	if !requirePermission(w, r, "delete", key) {
 		return
 	}
 
@@ -227,7 +251,7 @@ func (h *BoxesHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !requirePermission(w, r, "read", key.Box) {
+	if !requirePermission(w, r, "read", key) {
 		return
 	}
 
@@ -254,7 +278,7 @@ func (h *BoxesHandler) GetHistoryVersion(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if !requirePermission(w, r, "read", key.Box) {
+	if !requirePermission(w, r, "read", key) {
 		return
 	}
 
@@ -295,7 +319,7 @@ func (h *BoxesHandler) GetMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !requirePermission(w, r, "read", key.Box) {
+	if !requirePermission(w, r, "read", key) {
 		return
 	}
 

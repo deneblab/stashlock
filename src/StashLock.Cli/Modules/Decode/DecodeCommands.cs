@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Deneblab.StashLock.Cli.Modules.Encode;
 using Microsoft.Extensions.Logging;
@@ -115,7 +116,7 @@ internal class DecodeCommands
             var outputPath = Path.IsPathFullyQualified(output)
                 ? output
                 : Path.GetFullPath(output);
-            File.WriteAllText(outputPath, result);
+            SecureFile.WriteAllText(outputPath, result);
             _log.LogInformation("Decrypted output written to {Path}", outputPath);
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine($"Decrypted: {outputPath}");

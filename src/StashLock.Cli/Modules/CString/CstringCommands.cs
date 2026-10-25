@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConsoleAppFramework;
+using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Models;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Microsoft.Extensions.Logging;
@@ -38,11 +39,19 @@ internal class CstringCommands
     ///   stashlock cstring ./my-vault --tag production
     ///   stashlock cstring ./my-vault --tag production --base64
     ///   stashlock cstring ./my-vault --tag production --env
+    ///   stashlock cstring ./my-vault --tag production --api-key slk_...
     /// </summary>
+    /// <param name="dir">Vault directory containing stashlock.config.json</param>
+    /// <param name="tag">Tag to build the connection string for</param>
+    /// <param name="apiKey">API key for box.tag (falls back to STASHLOCK_API_KEY env var)</param>
+    /// <param name="base64">Print only the base64-encoded connection string</param>
+    /// <param name="env">Print only the environment variable assignment</param>
+    /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
     public Task Root(
         [Argument] string dir,
         string tag = "",
+        string apiKey = "",
         bool base64 = false,
         bool env = false,
         CancellationToken cancellationToken = default)
@@ -87,7 +96,8 @@ internal class CstringCommands
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine($"  Vault directory: {targetDir}");
         Console.WriteLine($"  Server URL: {config.ServerUrl}");
-        Console.WriteLine($"  API Key: {Mask(config.ApiKey)}");
+        var resolvedApiKey = ServerSettings.ResolveApiKey(apiKey);
+        Console.WriteLine($"  API Key: {(resolvedApiKey == null ? $"(none — use --api-key or {ServerSettings.ApiKeyEnvVar})" : Mask(resolvedApiKey))}");
         Console.ResetColor();
         Console.WriteLine();
 
@@ -127,7 +137,7 @@ internal class CstringCommands
         }
 
         // 5. Build connection string
-        var plainCs = BuildConnectionString(config, selectedTag, keyPair.PrivateKey);
+        var plainCs = BuildConnectionString(config, resolvedApiKey, selectedTag, keyPair.PrivateKey);
         var base64Cs = Convert.ToBase64String(Encoding.UTF8.GetBytes(plainCs));
 
         // 6. Output
@@ -181,13 +191,13 @@ internal class CstringCommands
         return Task.CompletedTask;
     }
 
-    private static string BuildConnectionString(StashlockConfig config, string tag, string privateKey)
+    private static string BuildConnectionString(StashlockConfig config, string? apiKey, string tag, string privateKey)
     {
         var parts = new List<string>();
         if (!string.IsNullOrEmpty(config.ServerUrl))
             parts.Add($"Url={config.ServerUrl}");
-        if (!string.IsNullOrEmpty(config.ApiKey))
-            parts.Add($"ApiKey={config.ApiKey}");
+        if (!string.IsNullOrEmpty(apiKey))
+            parts.Add($"ApiKey={apiKey}");
         if (!string.IsNullOrEmpty(privateKey))
             parts.Add($"PrivateKey={privateKey}");
         if (!string.IsNullOrEmpty(config.Name))

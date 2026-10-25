@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/deneblab/stashlock-servergo/middleware"
 	"github.com/deneblab/stashlock-servergo/models"
 	"github.com/deneblab/stashlock-servergo/store"
 	"github.com/go-chi/chi/v5"
@@ -90,13 +91,14 @@ type DashboardHandler struct {
 	storage     *store.StorageService
 	apiKeyStore *store.ApiKeyStore
 	auditStore  *store.AuditStore
-	masterKey   string
+	masterKey   string // one-time bootstrap key (STASHLOCK_MASTER_KEY)
 	version     string
 
-	sessions sync.Map // token -> true
+	sessions sync.Map // token -> admin key id
 
 	layoutTmpl      *template.Template
 	loginTmpl       *template.Template
+	bootstrapTmpl   *template.Template
 	indexTmpl       *template.Template
 	boxesTmpl       *template.Template
 	keysTmpl        *template.Template
@@ -113,6 +115,7 @@ type pageData struct {
 	Version      string
 	ActiveTab    string
 	ErrorMessage string
+	AdminKey     string // shown once after the master key is exchanged
 }
 
 func NewDashboardHandler(db *sqlx.DB, storage *store.StorageService, apiKeyStore *store.ApiKeyStore, auditStore *store.AuditStore, masterKey, version string) *DashboardHandler {
@@ -128,6 +131,7 @@ func NewDashboardHandler(db *sqlx.DB, storage *store.StorageService, apiKeyStore
 	// Parse layout + each page
 	layoutHTML := mustRead("templates/layout.html")
 
+	h.bootstrapTmpl = template.Must(template.New("page").Funcs(funcMap).Parse(layoutHTML + mustRead("templates/bootstrap.html")))
 	h.loginTmpl = template.Must(template.New("page").Funcs(funcMap).Parse(layoutHTML + mustRead("templates/login.html")))
 	h.indexTmpl = template.Must(template.New("page").Funcs(funcMap).Parse(layoutHTML + mustRead("templates/index.html")))
 	h.boxesTmpl = template.Must(template.New("page").Funcs(funcMap).Parse(layoutHTML + mustRead("templates/boxes.html")))
@@ -163,9 +167,9 @@ func generateSessionToken() string {
 	return hex.EncodeToString(b)
 }
 
-func (h *DashboardHandler) setSession(w http.ResponseWriter) string {
+func (h *DashboardHandler) setSession(w http.ResponseWriter, adminKeyId string) string {
 	token := generateSessionToken()
-	h.sessions.Store(token, true)
+	h.sessions.Store(token, adminKeyId)
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
@@ -190,13 +194,22 @@ func (h *DashboardHandler) clearSession(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// isAuthenticated checks the session cookie and that its admin key is still active.
 func (h *DashboardHandler) isAuthenticated(r *http.Request) bool {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil || c.Value == "" {
 		return false
 	}
-	_, ok := h.sessions.Load(c.Value)
-	return ok
+	v, ok := h.sessions.Load(c.Value)
+	if !ok {
+		return false
+	}
+	key, err := h.apiKeyStore.Get(v.(string))
+	if err != nil || key == nil || !key.IsActive || !key.IsAdmin || isExpiredPtr(key.ExpiresAt, time.Now().UTC()) {
+		h.sessions.Delete(c.Value)
+		return false
+	}
+	return true
 }
 
 func (h *DashboardHandler) ensureAuth(w http.ResponseWriter, r *http.Request) bool {
@@ -248,36 +261,43 @@ func (h *DashboardHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *DashboardHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.FormValue("apiKey")
+	token := strings.TrimSpace(r.FormValue("apiKey"))
 
-	if apiKey == "" {
-		h.renderPage(w, h.loginTmpl, pageData{IsLoggedIn: false, ErrorMessage: "Please enter an API key"})
+	if token == "" {
+		h.renderPage(w, h.loginTmpl, pageData{IsLoggedIn: false, ErrorMessage: "Please enter your admin key"})
 		return
 	}
 
-	// No master key = open access
-	if h.masterKey == "" {
-		h.setSession(w)
-		http.Redirect(w, r, "/admin", http.StatusFound)
+	// One-time master key: exchange it for a new admin key, shown once
+	if middleware.MatchMasterKey(h.masterKey, token) {
+		resp, err := h.apiKeyStore.ConsumeMasterKey(token, "Admin (from master key, "+time.Now().UTC().Format("2006-01-02")+")")
+		if err != nil {
+			msg := "Failed to exchange the master key"
+			if se, ok := err.(*models.StashLockError); ok {
+				msg = se.Message
+			} else {
+				log.Error().Err(err).Msg("Master key exchange failed")
+			}
+			log.Warn().Str("ip", r.RemoteAddr).Msg("Dashboard login with master key refused")
+			h.renderPage(w, h.loginTmpl, pageData{IsLoggedIn: false, ErrorMessage: msg})
+			return
+		}
+		log.Warn().Str("adminKeyId", resp.Info.Id).Msg("Master key exchanged for an admin key; the master key is now blocked")
+		h.setSession(w, resp.Info.Id)
+		h.renderPage(w, h.bootstrapTmpl, pageData{IsLoggedIn: true, Version: "v" + h.version, AdminKey: resp.Key})
 		return
 	}
 
-	// Check master key
-	if apiKey == h.masterKey {
-		h.setSession(w)
-		http.Redirect(w, r, "/admin", http.StatusFound)
-		return
-	}
-
-	// Check DB keys
-	identity, err := h.apiKeyStore.Validate(apiKey)
+	identity, err := h.apiKeyStore.Validate(token)
 	if err == nil && identity != nil && identity.IsMaster {
-		h.setSession(w)
+		h.setSession(w, identity.Id)
+		log.Info().Str("adminKeyId", identity.Id).Msg("Dashboard login")
 		http.Redirect(w, r, "/admin", http.StatusFound)
 		return
 	}
 
-	h.renderPage(w, h.loginTmpl, pageData{IsLoggedIn: false, ErrorMessage: "Invalid API key. The dashboard requires the master API key."})
+	log.Warn().Str("ip", r.RemoteAddr).Msg("Dashboard login failed")
+	h.renderPage(w, h.loginTmpl, pageData{IsLoggedIn: false, ErrorMessage: "Invalid admin key."})
 }
 
 func (h *DashboardHandler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -419,37 +439,6 @@ func (h *DashboardHandler) BoxesPostHandler(w http.ResponseWriter, r *http.Reque
 	handler := r.URL.Query().Get("handler")
 
 	switch handler {
-	case "Create":
-		box := r.FormValue("box")
-		tag := r.FormValue("tag")
-		version := r.FormValue("version")
-		value := r.FormValue("value")
-		ttlStr := r.FormValue("ttl")
-
-		keyText := fmt.Sprintf("%s.%s.%s", box, tag, version)
-		ks, err := models.NewKeyStore(keyText)
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-
-		var expiresAt *string
-		if ttlStr != "" {
-			ttl, err := strconv.Atoi(ttlStr)
-			if err == nil && ttl > 0 {
-				exp := time.Now().UTC().Add(time.Duration(ttl) * time.Second).Format(time.RFC3339Nano)
-				expiresAt = &exp
-			}
-		}
-
-		if err := h.storage.Set(ks, value, expiresAt); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-
-		keys, _ := h.storage.ListKeys(nil, 1000, 0)
-		h.renderPartial(w, h.boxListTmpl, keys)
-
 	case "Delete":
 		key := r.URL.Query().Get("key")
 		ks, err := models.NewKeyStore(key)
@@ -477,6 +466,9 @@ func (h *DashboardHandler) BoxesPostHandler(w http.ResponseWriter, r *http.Reque
 		}
 		keys, _ := h.storage.ListKeys(nil, 1000, 0)
 		h.renderPartial(w, h.boxListTmpl, keys)
+
+	default:
+		http.Error(w, "Unknown handler", http.StatusBadRequest)
 	}
 }
 
@@ -490,7 +482,7 @@ func (h *DashboardHandler) KeysHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch handler {
 	case "List":
-		keys, err := h.apiKeyStore.List()
+		keys, err := h.apiKeyStore.List("", "")
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -509,39 +501,22 @@ func (h *DashboardHandler) KeysPostHandler(w http.ResponseWriter, r *http.Reques
 
 	switch handler {
 	case "Create":
-		name := r.FormValue("name")
-		scopesStr := r.FormValue("scopes")
 		canRead := r.FormValue("canRead") == "true"
 		canWrite := r.FormValue("canWrite") == "true"
 		canDelete := r.FormValue("canDelete") == "true"
-		expiresAt := r.FormValue("expiresAt")
-		rateLimitStr := r.FormValue("rateLimitPerMinute")
-
-		scopes := []string{"*"}
-		if scopesStr != "" {
-			scopes = nil
-			for _, s := range strings.Split(scopesStr, ",") {
-				s = strings.TrimSpace(s)
-				if s != "" {
-					scopes = append(scopes, s)
-				}
-			}
-			if len(scopes) == 0 {
-				scopes = []string{"*"}
-			}
-		}
-
 		req := store.CreateApiKeyRequest{
-			Name:    name,
-			Scopes:  scopes,
-			CanRead: &canRead,
-			CanWrite: &canWrite,
+			Name:      strings.TrimSpace(r.FormValue("name")),
+			IsAdmin:   r.FormValue("isAdmin") == "true",
+			Box:       strings.TrimSpace(r.FormValue("box")),
+			Tag:       strings.TrimSpace(r.FormValue("tag")),
+			CanRead:   &canRead,
+			CanWrite:  &canWrite,
 			CanDelete: &canDelete,
 		}
-		if expiresAt != "" {
+		if expiresAt := r.FormValue("expiresAt"); expiresAt != "" {
 			req.ExpiresAt = &expiresAt
 		}
-		if rateLimitStr != "" {
+		if rateLimitStr := r.FormValue("rateLimitPerMinute"); rateLimitStr != "" {
 			if rl, err := strconv.Atoi(rateLimitStr); err == nil {
 				req.RateLimitPerMinute = &rl
 			}
@@ -549,24 +524,39 @@ func (h *DashboardHandler) KeysPostHandler(w http.ResponseWriter, r *http.Reques
 
 		resp, err := h.apiKeyStore.Create(req)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			status := http.StatusInternalServerError
+			msg := "Failed to create API key"
+			if se, ok := err.(*models.StashLockError); ok {
+				status = se.StatusCode
+				msg = se.Message
+			}
+			writeJSON(w, status, map[string]string{"error": msg})
 			return
 		}
+		writeJSON(w, http.StatusOK, resp)
 
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"key":"%s","info":{"id":"%s","name":"%s"}}`, resp.Key, resp.Info.Id, resp.Info.Name)
-
-	case "Revoke":
+	case "Revoke", "DeleteKey":
 		id := r.URL.Query().Get("id")
-		_ = h.apiKeyStore.Revoke(id)
-		keys, _ := h.apiKeyStore.List()
+		var err error
+		if handler == "Revoke" {
+			err = h.apiKeyStore.Revoke(id)
+		} else {
+			err = h.apiKeyStore.Delete(id)
+		}
+		if err != nil {
+			status := http.StatusInternalServerError
+			msg := "Operation failed"
+			if se, ok := err.(*models.StashLockError); ok {
+				status, msg = se.StatusCode, se.Message
+			}
+			http.Error(w, msg, status)
+			return
+		}
+		keys, _ := h.apiKeyStore.List("", "")
 		h.renderPartial(w, h.keyListTmpl, keys)
 
-	case "DeleteKey":
-		id := r.URL.Query().Get("id")
-		_ = h.apiKeyStore.Delete(id)
-		keys, _ := h.apiKeyStore.List()
-		h.renderPartial(w, h.keyListTmpl, keys)
+	default:
+		http.Error(w, "Unknown handler", http.StatusBadRequest)
 	}
 }
 

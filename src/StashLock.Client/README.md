@@ -252,7 +252,7 @@ public class MyService(ISecretsStore secrets)
 | `STASHLOCK_CONNECTION_STRING` | Full connection string (`Url=...;ApiKey=...;Box=...;Tag=...`) | Auto-read as defaults in `OpenAsync()` if set; explicit via `.FromConnectionString()` |
 | `STASHLOCK_PRIVATE_KEY` | Base64-encoded X25519 private key | Silent fallback for `.WithBox()`, `.FromEncryptedFile()` |
 | `STASHLOCK_API_URL` | Vault API base URL | Silent fallback |
-| `STASHLOCK_API_KEY` | API authentication key (Bearer token) | Silent fallback |
+| `STASHLOCK_API_KEY` | API key for the app's `box.tag` (Bearer token; read-only is enough) | Silent fallback |
 
 ## Error Handling
 
