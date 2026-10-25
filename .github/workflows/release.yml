@@ -2,6 +2,7 @@ name: Release
 
 # Creates the tag v<version> and a GitHub release for the first published version of a new
 # major.minor (after a version bump with abcversion). Later patch versions only publish packages.
+# Release notes: the commits since the previous v* tag.
 # Runs after the publish workflows; the release is created once every publish run of the commit
 # has succeeded (the Docker workflow runs only when the server changed).
 
@@ -88,7 +89,23 @@ jobs:
             if [ "$IMAGE" = "true" ]; then
               echo "Docker: \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/stashlock-server:${VERSION}\`"
             else
-              echo "Docker: server unchanged in this commit, use the latest \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/stashlock-server\` image"
+              echo "Docker: \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/stashlock-server:latest\` (no server changes in this commit; the image comes from an earlier one)"
+            fi
+
+            # Commits go straight to production (no pull requests), so the notes list commits, not PRs
+            PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$SHA" 2>/dev/null || true)
+            echo
+            if [ -n "$PREV" ]; then
+              echo "## Changes since ${PREV}"
+              echo
+              git log --no-merges --format='- %s (%h)' "${PREV}..${SHA}"
+              echo
+              echo "**Full Changelog**: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${PREV}...v${VERSION}"
+            else
+              echo "## Changes"
+              echo
+              git log --no-merges --format='- %s (%h)' "$SHA"
             fi
           } > notes.md
-          gh release create "v${VERSION}" --target "$SHA" --title "v${VERSION}" --notes-file notes.md --generate-notes
+          cat notes.md
+          gh release create "v${VERSION}" --target "$SHA" --title "v${VERSION}" --notes-file notes.md
