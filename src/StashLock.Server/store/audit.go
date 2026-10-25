@@ -141,3 +141,12 @@ func (s *AuditStore) Query(boxKey, action string, limit int) ([]AuditEntry, erro
 	}
 	return entries, nil
 }
+
+// PurgeBefore permanently removes audit entries older than the cutoff and returns how many were removed.
+func (s *AuditStore) PurgeBefore(cutoff time.Time) (int64, error) {
+	res, err := s.db.Exec("DELETE FROM AuditLogs WHERE OccurredAt < ?", cutoff.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return 0, fmt.Errorf("purge audit logs: %w", err)
+	}
+	return res.RowsAffected()
+}

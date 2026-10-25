@@ -140,7 +140,8 @@ func run(ctx context.Context, cfg *config.Config, ln net.Listener) error {
 
 	// Background cleanup stops with ctx
 	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
-	cleanupDone := services.StartExpiredKeyCleanup(cleanupCtx, db, storage, cfg.DeletedRetentionDays)
+	cleanupDone := services.StartExpiredKeyCleanup(cleanupCtx, db, storage, auditStore,
+		services.Retention{DeletedDays: cfg.DeletedRetentionDays, AuditDays: cfg.AuditRetentionDays})
 	defer func() { cancelCleanup(); <-cleanupDone }()
 
 	srv := &http.Server{
@@ -159,6 +160,7 @@ func run(ctx context.Context, cfg *config.Config, ln net.Listener) error {
 		Str("logLevel", cfg.LogLevel).
 		Bool("masterKeyUnused", masterKeyUnused).
 		Int("deletedRetentionDays", cfg.DeletedRetentionDays).
+		Int("auditRetentionDays", cfg.AuditRetentionDays).
 		Strs("adminNetworks", cfg.AdminNetworks()).
 		Strs("trustedProxies", cfg.TrustedProxyNetworks()).
 		Strs("allowedOrigins", cfg.AllowedOriginsList()).

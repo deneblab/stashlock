@@ -22,6 +22,7 @@ type Config struct {
 	MaxRequestBodySizeKB  int    `json:"maxRequestBodySizeKB"`
 	DefaultRateLimitPerMin int   `json:"defaultRateLimitPerMinute"`
 	DeletedRetentionDays  int    `json:"deletedRetentionDays"`
+	AuditRetentionDays    int    `json:"auditRetentionDays"`
 	AdminAllowedNetworks  string `json:"adminAllowedNetworks"`
 	TrustedProxies        string `json:"trustedProxies"`
 	LogDir                string `json:"logDir"`
@@ -61,6 +62,9 @@ func (c *Config) Validate() error {
 	if c.DeletedRetentionDays < 0 {
 		return fmt.Errorf("STASHLOCK_DELETED_RETENTION_DAYS must be 0 (keep forever) or more")
 	}
+	if c.AuditRetentionDays < 0 {
+		return fmt.Errorf("STASHLOCK_AUDIT_RETENTION_DAYS must be 0 (keep forever) or more")
+	}
 	for _, list := range [][]string{c.AdminNetworks(), c.TrustedProxyNetworks()} {
 		for _, n := range list {
 			if _, _, err := net.ParseCIDR(n); err != nil {
@@ -98,6 +102,7 @@ func Load() *Config {
 		MaxRequestBodySizeKB:  110,
 		DefaultRateLimitPerMin: 60,
 		DeletedRetentionDays:  30,
+		AuditRetentionDays:    60,
 		LogDir:                "./logs",
 		LogLevel:              "info",
 		Version:               BuildVersion,
@@ -136,6 +141,11 @@ func Load() *Config {
 	if v := os.Getenv("STASHLOCK_MAX_REQUEST_BODY_KB"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.MaxRequestBodySizeKB = n
+		}
+	}
+	if v := os.Getenv("STASHLOCK_AUDIT_RETENTION_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.AuditRetentionDays = n
 		}
 	}
 	if v := os.Getenv("STASHLOCK_DELETED_RETENTION_DAYS"); v != "" {

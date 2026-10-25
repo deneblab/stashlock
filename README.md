@@ -20,7 +20,7 @@ A secure, lightweight key-value storage system (secrets vault) with a REST API, 
 - **Access control** — one-time master key → admin keys; API keys bound to one `box.tag` with read/write/delete permissions, expiry and rate limits
 - **Versioning** — history of earlier values with restore
 - **TTL and soft delete** — optional expiry; deleted entries stay restorable for a retention period
-- **Audit log** — reads, writes, sign-ins and key changes
+- **Audit log** — reads, writes, sign-ins and key changes, kept for a configurable period (default 60 days)
 - **Admin dashboard** — built-in web UI at `/admin`
 - **SQLite** — single-file database with versioned migrations
 - **Docker** — small image, compose examples including Traefik
@@ -206,6 +206,7 @@ The Go server reads configuration from `config.json` (optional) and environment 
 | `maxKeyLength` | — | 120 | Maximum key length in characters |
 | `maxRequestBodySizeKB` | `STASHLOCK_MAX_REQUEST_BODY_KB` | 110 | Largest accepted request body; bigger requests get 413. Must be ≥ `maxValueSizeKB` |
 | `deletedRetentionDays` | `STASHLOCK_DELETED_RETENTION_DAYS` | 30 | Days a deleted entry stays restorable before it and its history are removed for good. `0` = keep forever |
+| `auditRetentionDays` | `STASHLOCK_AUDIT_RETENTION_DAYS` | 60 | Days audit entries are kept before they are removed. `0` = keep forever |
 | `defaultRateLimitPerMinute` | `STASHLOCK_DEFAULT_RATE_LIMIT` | 60 | Default rate limit for API keys |
 | `allowedOrigins` | `STASHLOCK_ALLOWED_ORIGINS` | *(empty)* | Comma-separated CORS origins. Empty = CORS disabled (browsers cannot call the API cross-origin) |
 | `adminAllowedNetworks` | `STASHLOCK_ADMIN_NETWORKS` | *(empty)* | CIDR whitelist for `/admin`. Empty = any address (login still required) |

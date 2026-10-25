@@ -5,6 +5,10 @@ Versions follow [Semantic Versioning](https://semver.org/); while the major vers
 
 ## [Unreleased]
 
+### Added
+
+- Audit log retention: entries older than `STASHLOCK_AUDIT_RETENTION_DAYS` (default 60, `0` = keep forever) are removed by the cleanup job.
+
 ### Removed
 
 - Whole-file encryption mode (`EncryptionMode` in `stashlock.config.json` is gone; an existing value is ignored).

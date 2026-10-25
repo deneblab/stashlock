@@ -178,6 +178,7 @@ Find the subnet with `docker network inspect traefik --format '{{(index .IPAM.Co
 | `STASHLOCK_DEFAULT_RATE_LIMIT` | `60` | Requests per minute for API keys without their own limit |
 | `STASHLOCK_MAX_REQUEST_BODY_KB` | `110` | Largest accepted request body |
 | `STASHLOCK_DELETED_RETENTION_DAYS` | `30` | Days deleted entries stay restorable (`0` = forever) |
+| `STASHLOCK_AUDIT_RETENTION_DAYS` | `60` | Days audit entries are kept (`0` = forever) |
 | `STASHLOCK_MAX_VALUE_SIZE_KB` | `100` | Maximum stored value size |
 | `STASHLOCK_PORT` | `8080` | Listen port inside the container |
 | `STASHLOCK_WORK_DIR` | `/app/work` (image) | Data directory |

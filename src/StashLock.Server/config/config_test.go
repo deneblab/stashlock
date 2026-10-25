@@ -17,6 +17,7 @@ func TestValidate(t *testing.T) {
 		{"short key", Config{MasterKey: "short"}, "shorter than 32"},
 		{"bad admin cidr", Config{MasterKey: validKey, AdminAllowedNetworks: "10.0.0.0/33"}, "invalid CIDR"},
 		{"bad proxy cidr", Config{MasterKey: validKey, TrustedProxies: "nope"}, "invalid CIDR"},
+		{"negative audit retention", Config{MasterKey: validKey, AuditRetentionDays: -1}, "STASHLOCK_AUDIT_RETENTION_DAYS"},
 		{"valid key", Config{MasterKey: validKey}, ""},
 		{"with networks", Config{MasterKey: validKey, AdminAllowedNetworks: "100.64.0.0/10", TrustedProxies: "172.18.0.0/16"}, ""},
 	}
