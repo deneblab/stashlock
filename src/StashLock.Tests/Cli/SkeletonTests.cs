@@ -30,7 +30,7 @@ public class SkeletonTests : IDisposable
     }
 
     /// <summary>Uncomments the Skeleton section the way a user would.</summary>
-    private static string EnableSkeleton(string config, string exclude)
+    internal static string EnableSkeleton(string config, string exclude)
     {
         var lines = config.Split('\n').ToList();
         var start = lines.FindIndex(l => l.Contains("// \"Skeleton\": {"));

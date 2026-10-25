@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -36,6 +37,8 @@ internal class GenerateCommands
     /// Examples:
     ///   stashlock encode ./my-vault/secrets.json
     ///   stashlock encode ./my-vault/secrets.json --verbose
+    ///
+    /// A secrets.&lt;tag&gt;.json next to the file overrides its values for that tag.
     /// </summary>
     /// <param name="file">Path to the plaintext JSON secrets file</param>
     /// <param name="verbose">Show resolved configuration before encoding</param>
@@ -58,18 +61,10 @@ internal class GenerateCommands
             return Task.FromResult(ExitCodes.Error);
         }
 
-        var secretsJson = File.ReadAllText(secretFilePath);
-        Dictionary<string, JsonElement>? secretsRaw;
+        Dictionary<string, string> secretsDict;
         try
         {
-            secretsRaw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(secretsJson, ReadOptions);
-            if (secretsRaw == null)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.Error.WriteLine("Error: Failed to parse secrets file as JSON object");
-                Console.ResetColor();
-                return Task.FromResult(ExitCodes.Error);
-            }
+            secretsDict = SecretsOverride.Read(secretFilePath);
         }
         catch (JsonException ex)
         {
@@ -78,9 +73,6 @@ internal class GenerateCommands
             Console.ResetColor();
             return Task.FromResult(ExitCodes.Error);
         }
-
-        var secretsDict = new Dictionary<string, string>();
-        FlattenJson(secretsRaw, "", secretsDict);
 
         var secretsDir = Path.GetDirectoryName(secretFilePath)!;
         var configPath = VaultConfig.PathIn(secretsDir);
@@ -125,6 +117,48 @@ internal class GenerateCommands
             return Task.FromResult(ExitCodes.Error);
         }
 
+        var inputBaseName = Path.GetFileNameWithoutExtension(secretFilePath);
+        var tags = new HashSet<string>(config.Tags, StringComparer.OrdinalIgnoreCase);
+        tags.UnionWith(keyFiles.Keys);
+
+        var dot = inputBaseName.LastIndexOf('.');
+        if (dot > 0 && tags.Contains(inputBaseName[(dot + 1)..])
+            && File.Exists(Path.Combine(secretsDir, inputBaseName[..dot] + ".json")))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Error: {Path.GetFileName(secretFilePath)} overrides {inputBaseName[..dot]}.json for tag '{inputBaseName[(dot + 1)..]}'.");
+            Console.Error.WriteLine($"Run 'stashlock encode {Path.Combine(Path.GetDirectoryName(file) ?? "", inputBaseName[..dot] + ".json")}' instead.");
+            Console.ResetColor();
+            return Task.FromResult(ExitCodes.Error);
+        }
+
+        // Read every override before writing anything, so a broken one leaves the vault unchanged.
+        var overrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var secretsByTag = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tag in keyFiles.Keys)
+        {
+            var overrideName = SecretsOverride.FileNameFor(inputBaseName, tag);
+            var overridePath = Path.Combine(secretsDir, overrideName);
+            if (!File.Exists(overridePath))
+            {
+                secretsByTag[tag] = secretsDict;
+                continue;
+            }
+            try
+            {
+                secretsByTag[tag] = SecretsOverride.Merge(secretsDict, SecretsOverride.Read(overridePath));
+                overrides[tag] = overrideName;
+            }
+            catch (JsonException ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Error.WriteLine($"Error: Invalid JSON in {overrideName}: {ex.Message}");
+                Console.Error.WriteLine("No files were written.");
+                Console.ResetColor();
+                return Task.FromResult(ExitCodes.Error);
+            }
+        }
+
         if (verbose)
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -132,11 +166,11 @@ internal class GenerateCommands
             Console.Error.WriteLine($"  Vault:      {config.Name}");
             Console.Error.WriteLine($"  Version:    {config.Version}");
             Console.Error.WriteLine($"  Key files:  {keyFiles.Count} ({string.Join(", ", keyFiles.Keys)})");
+            Console.Error.WriteLine($"  Overrides:  {(overrides.Count == 0 ? "none" : string.Join(", ", overrides.Values))}");
             Console.ResetColor();
             Console.WriteLine();
         }
 
-        var inputBaseName = Path.GetFileNameWithoutExtension(secretFilePath);
         var jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = true,
@@ -148,16 +182,28 @@ internal class GenerateCommands
         {
             var vaultKey = $"{config.Name}.{tag}.{config.Version}";
             var outputFileName = $"stashlock.enc.{tag}.{inputBaseName}.json";
-            var outputJson = JsonSerializer.Serialize(SopsCodec.Encrypt(secretsDict, keyPair.GetPublicKeyBytes(), vaultKey), jsonOptions);
+            var outputJson = JsonSerializer.Serialize(SopsCodec.Encrypt(secretsByTag[tag], keyPair.GetPublicKeyBytes(), vaultKey), jsonOptions);
 
             var outputPath = Path.Combine(secretsDir, outputFileName);
             File.WriteAllText(outputPath, outputJson);
 
             _log.LogInformation("Generated encrypted file for tag {Tag}: {File}", tag, outputPath);
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"Generated: {outputFileName}  (vault key: {vaultKey})");
+            Console.WriteLine(overrides.TryGetValue(tag, out var overrideFile)
+                ? $"Generated: {outputFileName}  (vault key: {vaultKey}, override: {overrideFile})"
+                : $"Generated: {outputFileName}  (vault key: {vaultKey})");
             Console.ResetColor();
             generated++;
+        }
+
+        foreach (var tag in config.Tags.Where(t => !keyFiles.ContainsKey(t)))
+        {
+            var overrideName = SecretsOverride.FileNameFor(inputBaseName, tag);
+            if (!File.Exists(Path.Combine(secretsDir, overrideName)))
+                continue;
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.Error.WriteLine($"Warning: {overrideName} skipped: no stashlock.key.{tag}.json in the vault");
+            Console.ResetColor();
         }
 
         if (config.Skeleton != null)
@@ -208,39 +254,5 @@ internal class GenerateCommands
         }
 
         return result;
-    }
-
-    private static void FlattenJson(Dictionary<string, JsonElement> obj, string prefix, Dictionary<string, string> result)
-    {
-        foreach (var kvp in obj)
-        {
-            var key = prefix.Length == 0 ? kvp.Key : $"{prefix}:{kvp.Key}";
-            FlattenElement(kvp.Value, key, result);
-        }
-    }
-
-    private static void FlattenElement(JsonElement element, string key, Dictionary<string, string> result)
-    {
-        switch (element.ValueKind)
-        {
-            case JsonValueKind.Object:
-                foreach (var prop in element.EnumerateObject())
-                    FlattenElement(prop.Value, $"{key}:{prop.Name}", result);
-                break;
-            case JsonValueKind.Array:
-                var index = 0;
-                foreach (var item in element.EnumerateArray())
-                {
-                    FlattenElement(item, $"{key}:{index}", result);
-                    index++;
-                }
-                break;
-            case JsonValueKind.String:
-                result[key] = element.GetString()!;
-                break;
-            default:
-                result[key] = element.GetRawText();
-                break;
-        }
     }
 }

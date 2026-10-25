@@ -142,6 +142,8 @@ Generated: stashlock.enc.develop.secrets.json     (vault key: myapp.develop.0000
 
 Each tag gets its own encrypted file, sealed with that tag's public key.
 
+For a value that differs per tag (e.g. the production database password), add `my-vault/secrets.production.json` with only the keys that differ: `{ "Database": { "Password": "pr0d-s3cret!" } }`. `encode` applies it on top of `secrets.json` for `production`; `develop` keeps the values from `secrets.json`.
+
 ### 6. Publish to the server
 
 Each API key works on one `box.tag` (here `myapp.production` and `myapp.develop`). An admin creates them in the dashboard (**API Keys → Create API Key**, Box `myapp`, Tag `production`, Read + Write) or via the API:
@@ -187,15 +189,16 @@ stashlock decode ./my-vault/stashlock.enc.production.secrets.json
 | File | Commit to git? |
 |------|----------------|
 | `stashlock.config.json` | Yes |
-| `secrets.json` (plaintext) | **No** — add to `.gitignore` |
+| `secrets.json`, `secrets.<tag>.json` (plaintext) | **No** — add to `.gitignore` |
 | `stashlock.enc.*.json` (encrypted) | Yes — safe to commit |
 | `stashlock.skeleton.*.json` (key names only, optional) | Yes — safe to commit |
 | `stashlock.key.*.json` (key pairs) | **No** — share securely, never commit |
 
-`stashlock init` already added `stashlock.key.*.json` to `.gitignore`. Add the plaintext file yourself:
+`stashlock init` already added `stashlock.key.*.json` to `.gitignore`. Add the plaintext files yourself:
 
 ```
 secrets.json
+secrets.*.json
 ```
 
 ---

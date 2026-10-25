@@ -66,6 +66,28 @@ stashlock encode ./my-vault/secrets.json
 
 Reads a plaintext JSON secrets file and writes one encrypted file per tag (`stashlock.enc.{tag}.secrets.json`). Every value is encrypted separately and the file carries a MAC (`"mode": "sops"`, see [Encryption Details](#encryption-details)). Key names stay readable, so diffs show which secrets changed.
 
+#### Different values per tag (optional)
+
+`secrets.<tag>.json` next to `secrets.json` overrides its values for that tag, like `appsettings.json` and `appsettings.Production.json`. Put only what differs into it:
+
+```
+secrets.json              { "Database": { "Password": "dev" }, "ApiToken": "abc" }
+secrets.production.json   { "Database": { "Password": "prod" } }
+```
+
+```
+Generated: stashlock.enc.production.secrets.json  (vault key: myapp.production.00001, override: secrets.production.json)
+Generated: stashlock.enc.develop.secrets.json  (vault key: myapp.develop.00001)
+```
+
+- A tag without its own file gets `secrets.json` as is.
+- An override may add keys that `secrets.json` does not have; with the skeleton on, `encode` warns that the tags differ.
+- A value replaces a section of the same name and the other way round; arrays are overridden per index (`Hosts:0`).
+- Every override is read before anything is written: invalid JSON in one stops `encode` with no files changed.
+- `stashlock encode secrets.production.json` is refused when `secrets.json` exists; encode `secrets.json`.
+- An override for a tag whose key file is not in the vault is skipped with a warning.
+- Override files are plaintext: keep them out of git like `secrets.json`.
+
 #### Skeleton (optional)
 
 With the `Skeleton` section uncommented in `stashlock.config.json`, `encode` also writes `stashlock.skeleton.<FILE>.json` (`secrets.json` → `stashlock.skeleton.secrets.json`): the secrets' structure with every value replaced by `"text"`.
