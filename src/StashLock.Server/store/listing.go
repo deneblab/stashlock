@@ -200,3 +200,36 @@ func (s *StorageService) Stats() (*DashboardStats, error) {
 	st.BoxTags = len(groups)
 	return st, nil
 }
+
+// IsLive reports whether the entry exists and is neither deleted nor expired.
+func (s *StorageService) IsLive(key *models.KeyStore) (bool, error) {
+	var entity models.KeyValueEntity
+	err := s.db.Get(&entity, "SELECT * FROM KeyValues WHERE Key = ?", key.FullAddress())
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("query key: %w", err)
+	}
+	return !entity.IsDeleted && !isExpired(entity), nil
+}
+
+// PurgeDeleted permanently removes entries soft-deleted before the cutoff, with their history.
+func (s *StorageService) PurgeDeleted(before time.Time) (int64, error) {
+	cutoff := before.UTC().Format(time.RFC3339Nano)
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM KeyValueHistory WHERE BoxKey IN
+		(SELECT Key FROM KeyValues WHERE IsDeleted = 1 AND DeletedAt IS NOT NULL AND DeletedAt < ?)`, cutoff); err != nil {
+		return 0, fmt.Errorf("purge history: %w", err)
+	}
+	res, err := tx.Exec("DELETE FROM KeyValues WHERE IsDeleted = 1 AND DeletedAt IS NOT NULL AND DeletedAt < ?", cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("purge keys: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, tx.Commit()
+}

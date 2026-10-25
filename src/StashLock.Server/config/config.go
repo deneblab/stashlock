@@ -21,6 +21,7 @@ type Config struct {
 	MaxKeyLength          int    `json:"maxKeyLength"`
 	MaxRequestBodySizeKB  int    `json:"maxRequestBodySizeKB"`
 	DefaultRateLimitPerMin int   `json:"defaultRateLimitPerMinute"`
+	DeletedRetentionDays  int    `json:"deletedRetentionDays"`
 	AdminAllowedNetworks  string `json:"adminAllowedNetworks"`
 	TrustedProxies        string `json:"trustedProxies"`
 	LogDir                string `json:"logDir"`
@@ -53,6 +54,12 @@ func (c *Config) TrustedProxyNetworks() []string {
 func (c *Config) Validate() error {
 	if c.MasterKey != "" && len(c.MasterKey) < MinMasterKeyLength {
 		return fmt.Errorf("STASHLOCK_MASTER_KEY is shorter than %d characters", MinMasterKeyLength)
+	}
+	if c.MaxRequestBodySizeKB < c.MaxValueSizeKB {
+		return fmt.Errorf("maxRequestBodySizeKB (%d) must be at least maxValueSizeKB (%d)", c.MaxRequestBodySizeKB, c.MaxValueSizeKB)
+	}
+	if c.DeletedRetentionDays < 0 {
+		return fmt.Errorf("STASHLOCK_DELETED_RETENTION_DAYS must be 0 (keep forever) or more")
 	}
 	for _, list := range [][]string{c.AdminNetworks(), c.TrustedProxyNetworks()} {
 		for _, n := range list {
@@ -90,6 +97,7 @@ func Load() *Config {
 		MaxKeyLength:          120,
 		MaxRequestBodySizeKB:  110,
 		DefaultRateLimitPerMin: 60,
+		DeletedRetentionDays:  30,
 		LogDir:                "./logs",
 		LogLevel:              "info",
 		Version:               BuildVersion,
@@ -123,6 +131,16 @@ func Load() *Config {
 	if v := os.Getenv("STASHLOCK_DEFAULT_RATE_LIMIT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.DefaultRateLimitPerMin = n
+		}
+	}
+	if v := os.Getenv("STASHLOCK_MAX_REQUEST_BODY_KB"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxRequestBodySizeKB = n
+		}
+	}
+	if v := os.Getenv("STASHLOCK_DELETED_RETENTION_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.DeletedRetentionDays = n
 		}
 	}
 	if v := os.Getenv("STASHLOCK_ADMIN_NETWORKS"); v != "" {

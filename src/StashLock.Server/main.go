@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/deneblab/stashlock-servergo/config"
 	"github.com/deneblab/stashlock-servergo/handlers"
@@ -17,8 +20,8 @@ import (
 	"github.com/deneblab/stashlock-servergo/services"
 	"github.com/deneblab/stashlock-servergo/store"
 	"github.com/go-chi/chi/v5"
-	_ "modernc.org/sqlite"
 	"github.com/rs/cors"
+	_ "modernc.org/sqlite"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
@@ -45,23 +48,47 @@ func main() {
 		log.Fatal().Err(err).Msg("Invalid configuration")
 	}
 
+	// SIGINT/SIGTERM (e.g. docker stop) cancel ctx and trigger a graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to listen")
+	}
+	if err := run(ctx, cfg, ln); err != nil {
+		log.Fatal().Err(err).Msg("Server failed")
+	}
+	log.Info().Msg("Server stopped")
+}
+
+// Server timeouts protect against slow or stalled clients.
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 30 * time.Second
+	writeTimeout      = 30 * time.Second
+	idleTimeout       = 120 * time.Second
+	shutdownTimeout   = 15 * time.Second
+)
+
+// run serves on ln until ctx is cancelled, then drains in-flight requests and stops background work.
+func run(ctx context.Context, cfg *config.Config, ln net.Listener) error {
 	// Ensure work directory exists
 	dbDir := filepath.Join(cfg.WorkDir, "db")
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		log.Fatal().Err(err).Msg("Failed to create work directory")
+	if err := os.MkdirAll(dbDir, 0750); err != nil {
+		return fmt.Errorf("create work directory: %w", err)
 	}
 
 	// Open SQLite database
 	dbPath := filepath.Join(dbDir, "stashlock.sqlite")
 	db, err := sqlx.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to open database")
+		return fmt.Errorf("open database: %w", err)
 	}
 	defer db.Close()
 
-	// Run migrations
 	if err := store.RunMigrations(db); err != nil {
-		log.Fatal().Err(err).Msg("Failed to run migrations")
+		return fmt.Errorf("migrations: %w", err)
 	}
 
 	// Create stores
@@ -72,49 +99,83 @@ func main() {
 	// Fail closed: someone must be able to administer the server
 	adminOk, err := apiKeyStore.AdminAccessAvailable(cfg.MasterKey)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to check admin keys")
+		return fmt.Errorf("check admin keys: %w", err)
 	}
 	if !adminOk {
-		log.Fatal().Msg("No way to administer the server: no active admin key, and STASHLOCK_MASTER_KEY is empty or already used. Set a new STASHLOCK_MASTER_KEY (at least 32 characters) and restart.")
+		return errors.New("no way to administer the server: no active admin key, and STASHLOCK_MASTER_KEY is empty or already used. Set a new STASHLOCK_MASTER_KEY (at least 32 characters) and restart")
 	}
 	masterKeyUnused := false
 	if cfg.MasterKey != "" {
 		consumed, err := apiKeyStore.IsMasterKeyConsumed(cfg.MasterKey)
 		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to check master key")
+			return fmt.Errorf("check master key: %w", err)
 		}
 		masterKeyUnused = !consumed
 	}
 
-	// Create handlers
-	boxesHandler := handlers.NewBoxesHandler(storage, auditStore, cfg.Version)
+	// Background cleanup stops with ctx
+	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
+	cleanupDone := services.StartExpiredKeyCleanup(cleanupCtx, db, storage, cfg.DeletedRetentionDays)
+	defer func() { cancelCleanup(); <-cleanupDone }()
+
+	srv := &http.Server{
+		Handler:           newRouter(cfg, db, storage, apiKeyStore, auditStore),
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+
+	log.Info().
+		Str("version", cfg.Version).
+		Str("addr", ln.Addr().String()).
+		Str("workDir", cfg.WorkDir).
+		Str("logDir", cfg.LogDir).
+		Str("logLevel", cfg.LogLevel).
+		Bool("masterKeyUnused", masterKeyUnused).
+		Int("deletedRetentionDays", cfg.DeletedRetentionDays).
+		Strs("adminNetworks", cfg.AdminNetworks()).
+		Strs("trustedProxies", cfg.TrustedProxyNetworks()).
+		Strs("allowedOrigins", cfg.AllowedOriginsList()).
+		Msg("StashLock.ServerGo starting")
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- srv.Serve(ln) }()
+
+	select {
+	case err := <-serveErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+	}
+
+	log.Info().Dur("timeout", shutdownTimeout).Msg("Shutting down: draining in-flight requests")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("graceful shutdown: %w", err)
+	}
+	return nil
+}
+
+// newRouter wires middleware and routes. Order matters: Recovery first so it catches
+// panics anywhere below; the auth guard sits before auth so it sees every 401.
+func newRouter(cfg *config.Config, db *sqlx.DB, storage *store.StorageService, apiKeyStore *store.ApiKeyStore, auditStore *store.AuditStore) http.Handler {
+	boxesHandler := handlers.NewBoxesHandler(storage, auditStore, cfg.Version, cfg.MaxKeyLength)
 	healthHandler := handlers.NewHealthHandler(db)
 	keysHandler := handlers.NewKeysHandler(apiKeyStore, auditStore)
-	decodeHandler := handlers.NewDecodeHandler(storage)
 	auditHandler := handlers.NewAuditHandler(auditStore)
 	statsHandler := handlers.NewStatsHandler(db, cfg.Version)
+	authGuard := mw.NewAuthGuard(cfg.TrustedProxyNetworks())
 
-	// Start background cleanup service
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	services.StartExpiredKeyCleanup(ctx, db)
-
-	// Handle graceful shutdown
-	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		<-sigCh
-		log.Info().Msg("Shutting down...")
-		cancel()
-	}()
-
-	// Setup router
 	r := chi.NewRouter()
-
-	// Middleware chain (order matches .NET server)
+	r.Use(mw.Recovery)
 	r.Use(mw.Correlation)
 	r.Use(mw.RequestLog)
 	r.Use(mw.SecurityHeaders)
+	r.Use(mw.BodyLimit(int64(cfg.MaxRequestBodySizeBytes())))
 
 	// CORS — opt-in only; without STASHLOCK_ALLOWED_ORIGINS browsers get no cross-origin access
 	if origins := cfg.AllowedOriginsList(); len(origins) > 0 {
@@ -126,17 +187,11 @@ func main() {
 		r.Use(corsHandler.Handler)
 	}
 
-	// Network access (CIDR whitelist for /admin)
 	r.Use(mw.NetworkAccess(cfg.AdminNetworks(), cfg.TrustedProxyNetworks()))
-
-	// API key auth
+	r.Use(mw.SameOriginAdminPosts)
+	r.Use(authGuard.Middleware)
 	r.Use(mw.ApiKeyAuth(apiKeyStore))
-
-	// Rate limiting
 	r.Use(mw.RateLimit(cfg.DefaultRateLimitPerMin))
-
-	// Panic recovery / error handler (outermost catch)
-	r.Use(mw.Recovery)
 
 	// Routes
 	r.Get("/", boxesHandler.GetRoot)
@@ -144,7 +199,6 @@ func main() {
 
 	r.Route("/boxes", func(r chi.Router) {
 		r.Get("/", boxesHandler.ListBoxes)
-		r.Post("/decode", decodeHandler.DecodeBox)
 		r.Post("/{keyTextUrl}", boxesHandler.SetBox)
 		r.Get("/{keyTextUrl}", boxesHandler.GetBox)
 		r.Delete("/{keyTextUrl}", boxesHandler.DeleteBox)
@@ -169,23 +223,9 @@ func main() {
 
 	// Admin dashboard
 	dashboard := handlers.NewDashboardHandler(storage, apiKeyStore, auditStore, cfg.MasterKey, cfg.Version, cfg.DefaultRateLimitPerMin)
+	dashboard.AuthGuard = authGuard
+	dashboard.RetentionDays = cfg.DeletedRetentionDays
 	r.Route("/admin", dashboard.Routes)
 
-	// Start server
-	addr := fmt.Sprintf(":%d", cfg.Port)
-	log.Info().
-		Str("version", cfg.Version).
-		Str("addr", addr).
-		Str("workDir", cfg.WorkDir).
-		Str("logDir", cfg.LogDir).
-		Str("logLevel", cfg.LogLevel).
-		Bool("masterKeyUnused", masterKeyUnused).
-		Strs("adminNetworks", cfg.AdminNetworks()).
-		Strs("trustedProxies", cfg.TrustedProxyNetworks()).
-		Strs("allowedOrigins", cfg.AllowedOriginsList()).
-		Msg("StashLock.ServerGo starting")
-
-	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatal().Err(err).Msg("Server failed")
-	}
+	return r
 }

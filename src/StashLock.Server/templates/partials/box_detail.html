@@ -8,7 +8,7 @@
         <dt>Created</dt><dd><time datetime="{{.Metadata.CreatedAt}}">{{.Metadata.CreatedAt}}</time></dd>
         <dt>Updated</dt><dd><time datetime="{{.Metadata.UpdatedAt}}">{{.Metadata.UpdatedAt}}</time></dd>
         <dt>Expires</dt><dd>{{if .Metadata.ExpiresAt}}<time datetime="{{.Metadata.ExpiresAt}}">{{.Metadata.ExpiresAt}}</time>{{if .Metadata.IsExpired}} <span class="pill bad">Expired</span>{{end}}{{else}}Never{{end}}</dd>
-        <dt>Status</dt><dd>{{if .Metadata.IsDeleted}}<span class="pill neutral">Deleted <time datetime="{{.Metadata.DeletedAt}}" data-relative>{{.Metadata.DeletedAt}}</time></span>{{else}}<span class="pill ok">Active</span>{{end}}</dd>
+        <dt>Status</dt><dd>{{if .Metadata.IsDeleted}}<span class="pill neutral">Deleted <time datetime="{{.Metadata.DeletedAt}}" data-relative>{{.Metadata.DeletedAt}}</time></span>{{with purgeDate .Metadata.DeletedAt $.RetentionDays}} <span class="hint">removed for good <time datetime="{{.}}" data-relative>{{.}}</time></span>{{end}}{{else}}<span class="pill ok">Active</span>{{end}}</dd>
     </dl>
     {{end}}
 
@@ -36,7 +36,7 @@
     {{if .Metadata}}{{if not .Metadata.IsDeleted}}
     <div class="field" style="border-top:1px solid var(--border);padding-top:14px">
         <span class="legend">Delete</span>
-        <span class="hint">Hides this entry from apps. You can restore it from “Show deleted”.</span>
+        <span class="hint">Hides this entry from apps. You can restore it from “Show deleted”{{if .RetentionDays}} for {{.RetentionDays}} days{{end}}.</span>
         <div><button class="btn danger sm" type="button" hx-get="/admin/boxes/confirm-delete?key={{.Key}}" hx-target="#dialog">Delete entry</button></div>
     </div>
     {{else}}

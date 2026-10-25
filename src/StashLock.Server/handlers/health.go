@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
 )
 
 type HealthHandler struct {
@@ -17,8 +18,9 @@ func NewHealthHandler(db *sqlx.DB) *HealthHandler {
 // Healthz handles GET /healthz — verifies DB connectivity.
 func (h *HealthHandler) Healthz(w http.ResponseWriter, r *http.Request) {
 	if err := h.db.Ping(); err != nil {
+		log.Error().Err(err).Msg("Health check: database unreachable")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("Unhealthy: " + err.Error()))
+		w.Write([]byte("Unhealthy"))
 		return
 	}
 	w.WriteHeader(http.StatusOK)

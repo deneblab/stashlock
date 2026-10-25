@@ -48,6 +48,10 @@ func (h *KeysHandler) CreateKey(w http.ResponseWriter, r *http.Request) {
 
 	var req store.CreateApiKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if middleware.IsBodyTooLarge(err) {
+			middleware.WriteStashLockError(w, r, err)
+			return
+		}
 		middleware.WriteStashLockError(w, r, models.NewStashLockError(
 			models.ErrorCodes.MissingRequiredFields, "Invalid request body", 400))
 		return

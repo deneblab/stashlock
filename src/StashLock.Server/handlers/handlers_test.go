@@ -1,9 +1,6 @@
 package handlers
 
 import (
-	"bytes"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,45 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/deneblab/stashlock-servergo/crypto"
 	"github.com/deneblab/stashlock-servergo/middleware"
 	"github.com/deneblab/stashlock-servergo/models"
 	"github.com/deneblab/stashlock-servergo/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
-	"golang.org/x/crypto/curve25519"
 	_ "modernc.org/sqlite"
 )
-
-// testKeyPair generates an X25519 keypair for handler tests.
-func testKeyPair(t *testing.T) (pubB64, privB64 string, pub, priv []byte) {
-	t.Helper()
-	priv = make([]byte, 32)
-	if _, err := rand.Read(priv); err != nil {
-		t.Fatal(err)
-	}
-	pub, err := curve25519.X25519(priv, curve25519.Basepoint)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return base64.StdEncoding.EncodeToString(pub),
-		base64.StdEncoding.EncodeToString(priv),
-		pub, priv
-}
-
-// sealAndStore encrypts plaintext with the public key and stores it as base64.
-func sealAndStore(t *testing.T, storage *store.StorageService, keyStr string, plaintext []byte, pub []byte) {
-	t.Helper()
-	sealed := crypto.TestSeal(plaintext, pub)
-	sealedB64 := base64.StdEncoding.EncodeToString(sealed)
-	key, err := models.NewKeyStore(keyStr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := storage.Set(key, sealedB64, nil); err != nil {
-		t.Fatal(err)
-	}
-}
 
 // testServer runs requests through the real auth middleware. Requests without an
 // Authorization header get a read/write/delete API key for the box.tag they target.
@@ -89,17 +54,8 @@ func (s *testServer) token(box, tag string, canRead, canWrite, canDelete bool) s
 	return resp.Key
 }
 
-// requestBoxTag extracts box and tag from /boxes/{b64key}... or a /boxes/decode body.
+// requestBoxTag extracts box and tag from /boxes/{b64key}...
 func requestBoxTag(r *http.Request) (string, string, bool) {
-	if r.URL.Path == "/boxes/decode" {
-		body, _ := io.ReadAll(r.Body)
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		var req models.DecodeRequest
-		if json.Unmarshal(body, &req) != nil || req.Box == "" || req.Tag == "" {
-			return "", "", false
-		}
-		return req.Box, req.Tag, true
-	}
 	rest, ok := strings.CutPrefix(r.URL.Path, "/boxes/")
 	if !ok || rest == "" {
 		return "", "", false
@@ -126,8 +82,7 @@ func setupTestRouter(t *testing.T) (*testServer, *store.StorageService) {
 	storage := store.NewStorageService(db, 100*1024)
 	auditStore := store.NewAuditStore(db)
 	apiKeyStore := store.NewApiKeyStore(db)
-	boxesHandler := NewBoxesHandler(storage, auditStore, "1.0.0-test")
-	decodeHandler := NewDecodeHandler(storage)
+	boxesHandler := NewBoxesHandler(storage, auditStore, "1.0.0-test", 120)
 	keysHandler := NewKeysHandler(apiKeyStore, auditStore)
 
 	r := chi.NewRouter()
@@ -140,7 +95,6 @@ func setupTestRouter(t *testing.T) (*testServer, *store.StorageService) {
 	r.Get("/boxes/{keyTextUrl}/meta", boxesHandler.GetMetadata)
 	r.Get("/boxes/{keyTextUrl}/history", boxesHandler.GetHistory)
 	r.Get("/boxes/{keyTextUrl}/history/{versionNumber}", boxesHandler.GetHistoryVersion)
-	r.Post("/boxes/decode", decodeHandler.DecodeBox)
 	r.Post("/keys", keysHandler.CreateKey)
 	r.Get("/keys", keysHandler.ListKeys)
 
@@ -380,107 +334,6 @@ func TestGetMetadata(t *testing.T) {
 	}
 }
 
-func TestDecodeBox_FullFlow(t *testing.T) {
-	r, storage := setupTestRouter(t)
-	_, privB64, pub, _ := testKeyPair(t)
-
-	// Seal and store a value
-	plaintext := []byte(`{"db_password":"hunter2"}`)
-	sealAndStore(t, storage, "vault.secrets.00001", plaintext, pub)
-
-	body := `{"box":"vault","tag":"secrets","version":"00001","privateKey":"` + privB64 + `"}`
-	req := httptest.NewRequest("POST", "/boxes/decode", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
-	}
-
-	result := w.Body.String()
-	expected := `{"db_password":"hunter2"}`
-	if result != expected {
-		t.Errorf("decode result = %q, want %q", result, expected)
-	}
-}
-
-func TestDecodeBox_DefaultVersion(t *testing.T) {
-	r, storage := setupTestRouter(t)
-	_, privB64, pub, _ := testKeyPair(t)
-
-	sealAndStore(t, storage, "vault.secrets.00001", []byte(`{"db_password":"hunter2"}`), pub)
-
-	// Omit version — should default to 00001
-	body := `{"box":"vault","tag":"secrets","privateKey":"` + privB64 + `"}`
-	req := httptest.NewRequest("POST", "/boxes/decode", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
-	}
-	if w.Body.String() != `{"db_password":"hunter2"}` {
-		t.Errorf("unexpected result: %s", w.Body.String())
-	}
-}
-
-func TestDecodeBox_MissingBox(t *testing.T) {
-	r, _ := setupTestRouter(t)
-	body := `{"tag":"secrets","privateKey":"dGVzdA=="}`
-	req := httptest.NewRequest("POST", "/boxes/decode", strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+r.token("vault", "secrets", true, false, false))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Errorf("status = %d, want 400", w.Code)
-	}
-}
-
-func TestDecodeBox_MissingPrivateKey(t *testing.T) {
-	r, _ := setupTestRouter(t)
-	body := `{"box":"vault","tag":"secrets"}`
-	req := httptest.NewRequest("POST", "/boxes/decode", strings.NewReader(body))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Errorf("status = %d, want 400", w.Code)
-	}
-}
-
-func TestDecodeBox_KeyNotFound(t *testing.T) {
-	r, _ := setupTestRouter(t)
-	_, privB64, _, _ := testKeyPair(t)
-	body := `{"box":"missing","tag":"key","privateKey":"` + privB64 + `"}`
-	req := httptest.NewRequest("POST", "/boxes/decode", strings.NewReader(body))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 404 {
-		t.Errorf("status = %d, want 404", w.Code)
-	}
-}
-
-func TestDecodeBox_WrongPrivateKey(t *testing.T) {
-	r, storage := setupTestRouter(t)
-	_, _, pub, _ := testKeyPair(t)
-	_, wrongPrivB64, _, _ := testKeyPair(t)
-
-	sealAndStore(t, storage, "vault.secrets.00001", []byte("secret data"), pub)
-
-	body := `{"box":"vault","tag":"secrets","privateKey":"` + wrongPrivB64 + `"}`
-	req := httptest.NewRequest("POST", "/boxes/decode", strings.NewReader(body))
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	if w.Code != 400 {
-		t.Errorf("status = %d, want 400", w.Code)
-	}
-}
-
 func TestHistory(t *testing.T) {
 	r, _ := setupTestRouter(t)
 	key := models.Base64UrlEncode("app.config.00001")
@@ -556,5 +409,26 @@ func TestErrorResponse_HasCorrectFormat(t *testing.T) {
 	}
 	if apiErr.Detail == "" {
 		t.Error("detail should not be empty")
+	}
+}
+
+func TestHistoryAndMeta_HiddenForDeletedEntries(t *testing.T) {
+	r, _ := setupTestRouter(t)
+	key := models.Base64UrlEncode("app.config.00001")
+	for _, v := range []string{"v1", "v2"} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest("POST", "/boxes/"+key, strings.NewReader(v)))
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("DELETE", "/boxes/"+key, nil))
+	if w.Code != 200 {
+		t.Fatalf("delete: %d", w.Code)
+	}
+	for _, p := range []string{"/history", "/history/1", "/meta"} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest("GET", "/boxes/"+key+p, nil))
+		if w.Code != 404 {
+			t.Errorf("GET %s of deleted entry: %d, want 404", p, w.Code)
+		}
 	}
 }

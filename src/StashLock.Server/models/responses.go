@@ -57,14 +57,6 @@ type HistoryResponse struct {
 	Versions      []HistoryEntry `json:"versions"`
 }
 
-// DecodeRequest is the body for POST /boxes/decode.
-type DecodeRequest struct {
-	Box        string `json:"box"`
-	Tag        string `json:"tag"`
-	Version    string `json:"version"`
-	PrivateKey string `json:"privateKey"`
-}
-
 // StatsResponse holds server statistics.
 type StatsResponse struct {
 	TotalKeys        int    `json:"totalKeys"`

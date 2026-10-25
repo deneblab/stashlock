@@ -74,13 +74,29 @@ func scopedPrefix(identity *models.ApiKeyIdentity, requested string) (string, bo
 }
 
 type BoxesHandler struct {
-	storage    *store.StorageService
-	auditStore *store.AuditStore
-	version    string
+	storage      *store.StorageService
+	auditStore   *store.AuditStore
+	version      string
+	maxKeyLength int
 }
 
-func NewBoxesHandler(storage *store.StorageService, auditStore *store.AuditStore, version string) *BoxesHandler {
-	return &BoxesHandler{storage: storage, auditStore: auditStore, version: version}
+func NewBoxesHandler(storage *store.StorageService, auditStore *store.AuditStore, version string, maxKeyLength int) *BoxesHandler {
+	return &BoxesHandler{storage: storage, auditStore: auditStore, version: version, maxKeyLength: maxKeyLength}
+}
+
+// requireLive answers 404 when the entry is deleted or expired, so its history stays hidden from API keys.
+func (h *BoxesHandler) requireLive(w http.ResponseWriter, r *http.Request, key *models.KeyStore) bool {
+	live, err := h.storage.IsLive(key)
+	if err != nil {
+		middleware.WriteStashLockError(w, r, err)
+		return false
+	}
+	if !live {
+		middleware.WriteStashLockError(w, r, models.NewStashLockError(
+			models.ErrorCodes.KeyNotFound, fmt.Sprintf("Key not found: %s", key.FullAddress()), 404))
+		return false
+	}
+	return true
 }
 
 // GetRoot handles GET /
@@ -127,9 +143,9 @@ func (h *BoxesHandler) ListBoxes(w http.ResponseWriter, r *http.Request) {
 // SetBox handles POST /boxes/{keyTextUrl}
 func (h *BoxesHandler) SetBox(w http.ResponseWriter, r *http.Request) {
 	keyTextUrl := chi.URLParam(r, "keyTextUrl")
-	if len(keyTextUrl) > 120 {
+	if len(keyTextUrl) > h.maxKeyLength {
 		middleware.WriteStashLockError(w, r, models.NewStashLockError(
-			models.ErrorCodes.InvalidKeyFormat, "Key exceeds maximum length of 120 characters", 400))
+			models.ErrorCodes.InvalidKeyFormat, fmt.Sprintf("Key exceeds maximum length of %d characters", h.maxKeyLength), 400))
 		return
 	}
 
@@ -160,8 +176,7 @@ func (h *BoxesHandler) SetBox(w http.ResponseWriter, r *http.Request) {
 	// Read body as plain text (no Content-Type requirement)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		middleware.WriteStashLockError(w, r, models.NewStashLockError(
-			models.ErrorCodes.InternalError, "Failed to read request body", 500))
+		middleware.WriteStashLockError(w, r, err)
 		return
 	}
 	content := string(body)
@@ -254,6 +269,9 @@ func (h *BoxesHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 	if !requirePermission(w, r, "read", key) {
 		return
 	}
+	if !h.requireLive(w, r, key) {
+		return
+	}
 
 	entries, err := h.storage.GetHistory(key)
 	if err != nil {
@@ -279,6 +297,9 @@ func (h *BoxesHandler) GetHistoryVersion(w http.ResponseWriter, r *http.Request)
 	}
 
 	if !requirePermission(w, r, "read", key) {
+		return
+	}
+	if !h.requireLive(w, r, key) {
 		return
 	}
 
@@ -320,6 +341,9 @@ func (h *BoxesHandler) GetMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !requirePermission(w, r, "read", key) {
+		return
+	}
+	if !h.requireLive(w, r, key) {
 		return
 	}
 

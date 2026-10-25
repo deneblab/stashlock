@@ -33,7 +33,7 @@ A secure, lightweight key-value storage system (secrets vault) with a REST API, 
 ## Components
 
 ### StashLock.Server
-Web API server (Go) for hosting the secrets vault service. Includes server-side decode endpoint with X25519 ECIES sealed-box decryption.
+Web API server (Go) for hosting the secrets vault service. It stores only ciphertext: secrets are encrypted and decrypted by the CLI and the client library, never on the server.
 
 ### StashLock.Cli
 Command-line interface tool for encrypting and managing secrets. Available as a global .NET tool.
@@ -211,11 +211,12 @@ Typical flow: set `STASHLOCK_MASTER_KEY` → first login at `/admin` → save th
 | GET | `/boxes` | API key | List keys of the API key's `box.tag` (optional `?prefix=` filter) |
 | POST | `/boxes/{key}` | Yes | Store content (optional `?expiresIn=` TTL in seconds) |
 | GET | `/boxes/{key}` | Yes | Retrieve content |
-| DELETE | `/boxes/{key}` | Yes | Soft-delete a key |
-| GET | `/boxes/{key}/meta` | Yes | Get key metadata (size, timestamps, version count) |
-| GET | `/boxes/{key}/history` | Yes | Get version history |
-| GET | `/boxes/{key}/history/{ver}` | Yes | Retrieve a specific historical version |
-| POST | `/boxes/decode` | Yes | Decode and decrypt a stored value (JSON body) |
+| DELETE | `/boxes/{key}` | Yes | Soft-delete a key (restorable in the dashboard until purged, see `deletedRetentionDays`) |
+| GET | `/boxes/{key}/meta` | Yes | Get key metadata (size, timestamps, version count); 404 once deleted or expired |
+| GET | `/boxes/{key}/history` | Yes | Get version history; 404 once deleted or expired |
+| GET | `/boxes/{key}/history/{ver}` | Yes | Retrieve a specific historical version; 404 once deleted or expired |
+
+> `POST /boxes/decode` was removed in SL-062: it sent the private key to the server. Decrypt with `stashlock decode` or the client library.
 
 #### API Key Management (admin key only)
 
@@ -235,27 +236,9 @@ Typical flow: set `STASHLOCK_MASTER_KEY` → first login at `/admin` → save th
 | GET | `/stats` | Server statistics (key counts, storage size, API key counts) |
 | GET | `/healthz` | Health check endpoint |
 
-#### Decode Endpoint
-
-`POST /boxes/decode` accepts a JSON body to fetch and decrypt a stored value server-side:
-
-```json
-{
-  "box": "myapp",
-  "tag": "prod",
-  "version": "00001",
-  "privateKey": "<base64-encoded X25519 private key>"
-}
-```
-
-- `box` and `tag` are required
-- `version` defaults to `"00001"` if omitted
-- `privateKey` is the base64-encoded X25519 private key matching the public key used for encryption
-- Returns the decrypted plaintext as `text/plain`
-
 ### Key Format
 
-Keys are URL-safe base64 encoded strings (max 120 characters). Decoded keys use a `box.tag.version` segment format.
+Keys are URL-safe base64 encoded strings (max `maxKeyLength`, 120 characters by default). Decoded keys use a `box.tag.version` segment format.
 
 ### Response Format
 
@@ -325,6 +308,8 @@ The Go server reads configuration from `config.json` (optional) and environment 
 | `masterKey` | `STASHLOCK_MASTER_KEY` | *(empty)* | One-time key (≥ 32 chars) exchanged for an admin key at the first `/admin` login. Required until an admin key exists |
 | `maxValueSizeKB` | `STASHLOCK_MAX_VALUE_SIZE_KB` | 100 | Maximum value size in KB |
 | `maxKeyLength` | — | 120 | Maximum key length in characters |
+| `maxRequestBodySizeKB` | `STASHLOCK_MAX_REQUEST_BODY_KB` | 110 | Largest accepted request body; bigger requests get 413. Must be ≥ `maxValueSizeKB` |
+| `deletedRetentionDays` | `STASHLOCK_DELETED_RETENTION_DAYS` | 30 | Days a deleted entry stays restorable before it and its history are removed for good. `0` = keep forever |
 | `defaultRateLimitPerMinute` | `STASHLOCK_DEFAULT_RATE_LIMIT` | 60 | Default rate limit for API keys |
 | `allowedOrigins` | `STASHLOCK_ALLOWED_ORIGINS` | *(empty)* | Comma-separated CORS origins. Empty = CORS disabled (browsers cannot call the API cross-origin) |
 | `adminAllowedNetworks` | `STASHLOCK_ADMIN_NETWORKS` | *(empty)* | CIDR whitelist for `/admin`. Empty = any address (login still required) |
@@ -375,6 +360,8 @@ Data is stored in bind-mounted directories:
 | `STASHLOCK_WORK_DIR` | Working directory for data (default: `./work`) |
 | `STASHLOCK_MASTER_KEY` | One-time master key (≥ 32 chars) for the first `/admin` login |
 | `STASHLOCK_DEFAULT_RATE_LIMIT` | Rate limit for API keys (per minute) |
+| `STASHLOCK_MAX_REQUEST_BODY_KB` | Largest accepted request body in KB (default 110) |
+| `STASHLOCK_DELETED_RETENTION_DAYS` | Days deleted entries stay restorable (default 30, `0` = forever) |
 | `STASHLOCK_ALLOWED_ORIGINS` | Comma-separated CORS origins (empty = CORS disabled) |
 | `STASHLOCK_ADMIN_NETWORKS` | CIDR whitelist for `/admin` |
 | `STASHLOCK_TRUSTED_PROXIES` | CIDRs of trusted reverse proxies (for `X-Forwarded-For`) |
@@ -471,7 +458,8 @@ Images and packages are tagged with:
 | **401 Unauthorized** | Missing, invalid, revoked or expired key (the master key is never accepted by the API) | Check the `Authorization: Bearer <key>` header and the key's status in the dashboard. |
 | **403 Forbidden** | Admin key used on `/boxes`, API key used on another `box.tag`, or missing permission | Use an API key created for the secret's `box.tag` with the needed read/write/delete permission. |
 | **404 Key Not Found** | Key doesn't exist or has been deleted | Use `GET /boxes?prefix=<box>` to list available keys. Check for typos in the `box.tag.version` format. |
-| **429 Too Many Requests** | Rate limit exceeded | Wait and retry after the `Retry-After` header value (seconds). Increase the key's rate limit in the dashboard. |
+| **413 Payload Too Large** | Request body bigger than `maxRequestBodySizeKB` | Publish a smaller file or raise `STASHLOCK_MAX_REQUEST_BODY_KB` (and `STASHLOCK_MAX_VALUE_SIZE_KB`). |
+| **429 Too Many Requests** | The key's rate limit was exceeded, or 10 failed authentications came from your address within 5 minutes (blocked for 15 minutes) | Wait for the `Retry-After` header value (seconds). For rate limits, raise the key's limit in the dashboard; for blocks, fix the key that keeps failing. |
 | **Decryption failed** | Wrong private key, corrupted data, or mode mismatch | Verify the private key matches the public key used for encryption. Confirm encryption mode (SOPS vs whole-file) is consistent. |
 | **No key files found** (CLI) | Missing `stashlock.key.*.json` in vault directory | Run `stashlock keygen` to generate key files, or use `stashlock init` with `-tags` to create both config and keys. |
 | **Config not found** (CLI) | Missing `stashlock.config.json` | Run `stashlock init <dir>` to create the vault configuration. |

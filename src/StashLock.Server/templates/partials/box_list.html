@@ -23,7 +23,7 @@
             <td class="num">{{formatBytesInt .SizeBytes}}</td>
             <td><time datetime="{{.UpdatedAt}}" data-relative>{{.UpdatedAt}}</time></td>
             <td>{{if .ExpiresAt}}<span class="pill warn"><time datetime="{{.ExpiresAt}}" data-relative>{{.ExpiresAt}}</time></span>{{else}}<span class="muted">—</span>{{end}}</td>
-            <td>{{if .IsDeleted}}<span class="pill neutral">Deleted</span>{{else}}<span class="pill ok">Active</span>{{end}}</td>
+            <td>{{if .IsDeleted}}<span class="pill neutral">Deleted</span>{{with purgeDate .DeletedAt $.RetentionDays}}<br><small class="muted">removed for good <time datetime="{{.}}" data-relative>{{.}}</time></small>{{end}}{{else}}<span class="pill ok">Active</span>{{end}}</td>
             <td>{{if .IsDeleted}}<button class="btn ghost sm" type="button" hx-post="/admin/boxes/restore?key={{.Key}}" hx-swap="none">Restore</button>{{else}}<button class="btn ghost sm" type="button" hx-get="/admin/boxes/detail?key={{.Key}}" hx-target="#drawer">Details</button>{{end}}</td>
         </tr>
         {{end}}

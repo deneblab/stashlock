@@ -55,6 +55,14 @@ var funcMap = template.FuncMap{
 	"formatBytes":    formatBytes,
 	"formatBytesInt": func(b int) string { return formatBytes(int64(b)) },
 	"add":            func(a, b int) int { return a + b },
+	// purgeDate is when a soft-deleted entry is removed for good (empty when kept forever).
+	"purgeDate": func(deletedAt string, days int) string {
+		t, err := time.Parse(time.RFC3339Nano, deletedAt)
+		if err != nil || days <= 0 {
+			return ""
+		}
+		return t.AddDate(0, 0, days).UTC().Format(time.RFC3339)
+	},
 	"derefStr": func(p *string) string {
 		if p == nil {
 			return ""
@@ -109,6 +117,11 @@ type DashboardHandler struct {
 	masterKey        string // one-time bootstrap key (STASHLOCK_MASTER_KEY)
 	version          string
 	defaultRateLimit int
+
+	// AuthGuard counts failed sign-ins toward the per-IP block (optional).
+	AuthGuard *middleware.AuthGuard
+	// RetentionDays is how long deleted entries stay restorable (0 = forever).
+	RetentionDays int
 
 	sessions sync.Map // token -> session
 
@@ -383,6 +396,7 @@ func (h *DashboardHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 				log.Error().Err(err).Msg("Master key exchange failed")
 			}
 			h.auditStore.Log("login.failed", "", "", r.RemoteAddr, corr, "failed", "master key refused")
+			h.AuthGuard.Fail(r)
 			h.renderPage(w, "login", pageData{ErrorMessage: msg})
 			return
 		}
@@ -403,6 +417,7 @@ func (h *DashboardHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Warn().Str("ip", r.RemoteAddr).Msg("Dashboard login failed")
+	h.AuthGuard.Fail(r)
 	h.auditStore.Log("login.failed", "", "", r.RemoteAddr, corr, "failed", "invalid admin key")
 	h.renderPage(w, "login", pageData{ErrorMessage: "That key is not valid. Check for missing characters; revoked or expired admin keys no longer work."})
 }

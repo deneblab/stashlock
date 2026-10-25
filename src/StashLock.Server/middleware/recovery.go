@@ -8,7 +8,7 @@ import (
 	"github.com/deneblab/stashlock-servergo/models"
 )
 
-// Recovery catches panics and StashLockErrors, returning JSON error responses.
+// Recovery catches panics anywhere below it and returns a JSON 500. Register it first.
 func Recovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -35,9 +35,16 @@ func WriteStashLockError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 
-	// ArgumentError → 400
+	if IsBodyTooLarge(err) {
+		writeError(w, r, http.StatusRequestEntityTooLarge, getTitleForStatus(http.StatusRequestEntityTooLarge),
+			"Request body is too large", models.ErrorCodes.ValueTooLarge)
+		return
+	}
+
+	// Unknown errors: details go to the log only; the client gets the trace id to quote
+	Log(r).Error().Err(err).Str("path", r.URL.Path).Msg("Unhandled error")
 	writeError(w, r, http.StatusInternalServerError, "Internal Server Error",
-		err.Error(), models.ErrorCodes.InternalError)
+		"An unexpected error occurred. Quote the traceId when reporting it.", models.ErrorCodes.InternalError)
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, title, detail, errorCode string) {
@@ -78,6 +85,10 @@ func getTitleForStatus(status int) string {
 		return "Not Found"
 	case 409:
 		return "Conflict"
+	case 413:
+		return "Payload Too Large"
+	case 429:
+		return "Too Many Requests"
 	default:
 		return "Internal Server Error"
 	}

@@ -5,31 +5,47 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/deneblab/stashlock-servergo/models"
 	"golang.org/x/time/rate"
 )
 
 type rateLimitEntry struct {
-	limiter *rate.Limiter
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
-// RateLimit creates middleware that enforces per-key fixed-window rate limiting.
+// RateLimit creates middleware that enforces a per-key token bucket (limit per minute, burst = limit).
+// Limiters are keyed by key id and limit, so a changed limit takes effect at once; idle ones are dropped.
 func RateLimit(defaultLimitPerMin int) func(http.Handler) http.Handler {
 	var mu sync.Mutex
 	limiters := make(map[string]*rateLimitEntry)
+	lastPrune := time.Now()
 
-	getLimiter := func(key string, limitPerMin int) *rate.Limiter {
+	getLimiter := func(id string, limitPerMin int) *rate.Limiter {
 		mu.Lock()
 		defer mu.Unlock()
 
+		now := time.Now()
+		if now.Sub(lastPrune) > time.Minute {
+			for k, e := range limiters {
+				if now.Sub(e.lastSeen) > 10*time.Minute {
+					delete(limiters, k)
+				}
+			}
+			lastPrune = now
+		}
+
+		key := fmt.Sprintf("%s|%d", id, limitPerMin)
 		if entry, ok := limiters[key]; ok {
+			entry.lastSeen = now
 			return entry.limiter
 		}
 
 		// rate.Limit is events per second
 		l := rate.NewLimiter(rate.Limit(float64(limitPerMin)/60.0), limitPerMin)
-		limiters[key] = &rateLimitEntry{limiter: l}
+		limiters[key] = &rateLimitEntry{limiter: l, lastSeen: now}
 		return l
 	}
 

@@ -3,6 +3,8 @@ package store
 import (
 	"testing"
 	"time"
+
+	"github.com/deneblab/stashlock-servergo/models"
 )
 
 func TestListFiltered_FiltersPagesAndDeleted(t *testing.T) {
@@ -150,5 +152,36 @@ func TestAuditQueryPage(t *testing.T) {
 	}
 	if n, _ := a.CountSince("login.failed", time.Now().Add(-time.Hour)); n != 1 {
 		t.Errorf("CountSince: %d", n)
+	}
+}
+
+func TestPurgeDeletedAndIsLive(t *testing.T) {
+	db := setupTestDB(t)
+	s := NewStorageService(db, 1024)
+	old, recent := mustKey(t, "app.develop.00001"), mustKey(t, "app.develop.00002")
+	for _, k := range []*models.KeyStore{old, recent} {
+		_ = s.Set(k, "a", nil)
+		_ = s.Set(k, "b", nil)
+		_ = s.Delete(k)
+	}
+	if live, _ := s.IsLive(old); live {
+		t.Error("deleted entry should not be live")
+	}
+	if _, err := db.Exec("UPDATE KeyValues SET DeletedAt = ? WHERE Key = ?", time.Now().AddDate(0, 0, -40).UTC().Format(time.RFC3339Nano), old.FullAddress()); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := s.PurgeDeleted(time.Now().AddDate(0, 0, -30))
+	if err != nil || n != 1 {
+		t.Fatalf("purged %d, err %v", n, err)
+	}
+	if meta, _ := s.GetMetadata(old); meta != nil {
+		t.Error("old deleted entry should be gone")
+	}
+	if h, _ := s.GetHistory(old); len(h) != 0 {
+		t.Error("history of purged entry should be gone")
+	}
+	if meta, _ := s.GetMetadata(recent); meta == nil {
+		t.Error("recently deleted entry must stay restorable")
 	}
 }

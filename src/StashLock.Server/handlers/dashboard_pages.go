@@ -108,8 +108,9 @@ type boxGroup struct {
 
 type boxListData struct {
 	pager
-	Groups   []boxGroup
-	Filtered bool
+	Groups        []boxGroup
+	Filtered      bool
+	RetentionDays int
 }
 
 func (h *DashboardHandler) BoxesPage(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +139,8 @@ func (h *DashboardHandler) BoxList(w http.ResponseWriter, r *http.Request) {
 	}
 	d := boxListData{
 		pager:    newPager(page.Total, opts.Offset, boxPageSize, len(page.Entries)),
-		Filtered: opts.Box != "" || opts.Tag != "" || opts.Prefix != "" || opts.IncludeDeleted,
+		Filtered:      opts.Box != "" || opts.Tag != "" || opts.Prefix != "" || opts.IncludeDeleted,
+		RetentionDays: h.RetentionDays,
 	}
 	for _, e := range page.Entries {
 		bt := e.Box + "." + e.Tag
@@ -163,6 +165,7 @@ type boxDetailData struct {
 	Key, Box, Tag, Version string
 	Metadata               *models.KeyMetadata
 	History                []models.HistoryEntry
+	RetentionDays          int
 }
 
 func (h *DashboardHandler) renderBoxDetail(w http.ResponseWriter, ks *models.KeyStore) {
@@ -180,7 +183,7 @@ func (h *DashboardHandler) renderBoxDetail(w http.ResponseWriter, ks *models.Key
 		fail(w, err)
 		return
 	}
-	h.partial(w, "box_detail", boxDetailData{Key: ks.FullAddress(), Box: ks.Box, Tag: ks.Tag, Version: ks.Version, Metadata: meta, History: history})
+	h.partial(w, "box_detail", boxDetailData{Key: ks.FullAddress(), Box: ks.Box, Tag: ks.Tag, Version: ks.Version, Metadata: meta, History: history, RetentionDays: h.RetentionDays})
 }
 
 func (h *DashboardHandler) BoxDetail(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +223,7 @@ func (h *DashboardHandler) BoxConfirmDelete(w http.ResponseWriter, r *http.Reque
 	key := ks.FullAddress()
 	h.partial(w, "confirm", confirmData{
 		Title:   "Delete " + key + "?",
-		Body:    fmt.Sprintf("Apps reading %s.%s will get “not found” for this entry. This is a soft delete: you can restore it from “Show deleted”.", ks.Box, ks.Tag),
+		Body:    fmt.Sprintf("Apps reading %s.%s will get “not found” for this entry. You can restore it from “Show deleted”%s.", ks.Box, ks.Tag, retentionNote(h.RetentionDays)),
 		Action:  "/admin/boxes/delete?key=" + url.QueryEscape(key),
 		Confirm: "Delete entry",
 		Danger:  true,
@@ -492,4 +495,11 @@ func (h *DashboardHandler) AuditList(w http.ResponseWriter, r *http.Request) {
 		Entries:  entries,
 		Filtered: f.Action != "" || f.BoxKey != "" || f.Key != "" || f.From != "" || f.To != "",
 	})
+}
+
+func retentionNote(days int) string {
+	if days <= 0 {
+		return ""
+	}
+	return fmt.Sprintf(" for %d days; after that it is removed for good", days)
 }

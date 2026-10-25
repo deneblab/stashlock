@@ -15,6 +15,7 @@ func setupTestDB(t *testing.T) *sqlx.DB {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
+	db.SetMaxOpenConns(1) // every :memory: connection is a separate database
 	if err := RunMigrations(db); err != nil {
 		t.Fatalf("migrations: %v", err)
 	}

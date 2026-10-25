@@ -169,6 +169,8 @@ Find the subnet with `docker network inspect traefik --format '{{(index .IPAM.Co
 | `STASHLOCK_LOG_DIR` | `./logs` | Log directory; set to `/app/log` to match the volume |
 | `STASHLOCK_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `STASHLOCK_DEFAULT_RATE_LIMIT` | `60` | Requests per minute for API keys without their own limit |
+| `STASHLOCK_MAX_REQUEST_BODY_KB` | `110` | Largest accepted request body |
+| `STASHLOCK_DELETED_RETENTION_DAYS` | `30` | Days deleted entries stay restorable (`0` = forever) |
 | `STASHLOCK_MAX_VALUE_SIZE_KB` | `100` | Maximum stored value size |
 | `STASHLOCK_PORT` | `8080` | Listen port inside the container |
 | `STASHLOCK_WORK_DIR` | `/app/work` (image) | Data directory |
@@ -180,6 +182,12 @@ Find the subnet with `docker network inspect traefik --format '{{(index .IPAM.Co
 3. In the dashboard (**API Keys**) create a key per `box.tag`: Read + Write for CI (`stashlock publish`), Read only for applications. They use it as `STASHLOCK_API_KEY`.
 
 **Lost every admin key?** Set a new `STASHLOCK_MASTER_KEY` and restart; a never-used master key works once again.
+
+## Upgrades and shutdown
+
+The database schema is versioned: a new image migrates the database on start (no manual steps, no data loss). Databases created before SL-061 cannot be upgraded; move `./app/work/db/` away to start fresh.
+
+`docker stop` lets in-flight requests finish (up to 15 s) before the server exits.
 
 ## Backup
 

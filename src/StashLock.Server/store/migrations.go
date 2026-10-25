@@ -1,11 +1,15 @@
 package store
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 )
 
-var migrations = []string{
+// schemaV1 is the schema introduced with SL-061 (admin keys, API keys per box.tag).
+var schemaV1 = []string{
 	`CREATE TABLE IF NOT EXISTS KeyValues (
 		Key       TEXT PRIMARY KEY NOT NULL,
 		Value     TEXT NOT NULL,
@@ -40,8 +44,7 @@ var migrations = []string{
 		IsActive           INTEGER NOT NULL DEFAULT 1,
 		ExpiresAt          TEXT,
 		RateLimitPerMinute INTEGER,
-		CreatedAt          TEXT NOT NULL,
-		LastUsedAt         TEXT
+		CreatedAt          TEXT NOT NULL
 	)`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS IX_ApiKeys_KeyHash
 		ON ApiKeys (KeyHash)`,
@@ -69,14 +72,131 @@ var migrations = []string{
 		ON AuditLogs (BoxKey)`,
 }
 
-// RunMigrations creates tables and indexes if they don't exist.
-func RunMigrations(db *sqlx.DB) error {
-	for _, m := range migrations {
-		if _, err := db.Exec(m); err != nil {
-			log.Error().Err(err).Str("sql", m[:60]).Msg("Migration failed")
+// migration is one numbered schema step. Steps run in order, each in its own transaction,
+// and the reached version is recorded in SchemaVersion.
+type migration struct {
+	version int
+	name    string
+	apply   func(tx *sqlx.Tx) error
+}
+
+var migrationSteps = []migration{
+	{1, "initial schema (SL-061)", func(tx *sqlx.Tx) error {
+		for _, stmt := range schemaV1 {
+			if _, err := tx.Exec(stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
+	{2, "ApiKeys.LastUsedAt (SL-066)", func(tx *sqlx.Tx) error {
+		has, err := hasColumn(tx, "ApiKeys", "LastUsedAt")
+		if err != nil || has {
 			return err
 		}
+		_, err = tx.Exec("ALTER TABLE ApiKeys ADD COLUMN LastUsedAt TEXT")
+		return err
+	}},
+	{3, "index for deleted-entry retention (SL-062)", func(tx *sqlx.Tx) error {
+		_, err := tx.Exec("CREATE INDEX IF NOT EXISTS IX_KeyValues_IsDeleted_DeletedAt ON KeyValues (IsDeleted, DeletedAt)")
+		return err
+	}},
+}
+
+// SchemaVersionLatest is the version a fully migrated database has.
+var SchemaVersionLatest = migrationSteps[len(migrationSteps)-1].version
+
+type queryer interface {
+	Select(dest interface{}, query string, args ...interface{}) error
+}
+
+func hasColumn(q queryer, table, column string) (bool, error) {
+	var cols []struct {
+		Name string `db:"name"`
 	}
-	log.Info().Msg("Database migrations applied")
+	if err := q.Select(&cols, "SELECT name FROM pragma_table_info(?)", table); err != nil {
+		return false, err
+	}
+	for _, c := range cols {
+		if c.Name == column {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func hasTable(q queryer, table string) (bool, error) {
+	var names []string
+	if err := q.Select(&names, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", table); err != nil {
+		return false, err
+	}
+	return len(names) > 0, nil
+}
+
+// currentVersion reads SchemaVersion, or infers it for databases created before versioning.
+func currentVersion(db *sqlx.DB) (int, error) {
+	versioned, err := hasTable(db, "SchemaVersion")
+	if err != nil {
+		return 0, err
+	}
+	if versioned {
+		var v int
+		err := db.Get(&v, "SELECT COALESCE(MAX(Version), 0) FROM SchemaVersion")
+		return v, err
+	}
+	hasKeys, err := hasTable(db, "ApiKeys")
+	if err != nil || !hasKeys {
+		return 0, err
+	}
+	if legacy, err := hasColumn(db, "ApiKeys", "Scopes"); err != nil {
+		return 0, err
+	} else if legacy {
+		return 0, fmt.Errorf("database was created before SL-061 (ApiKeys.Scopes) and cannot be upgraded; " +
+			"move the old database away (work/db/stashlock.sqlite*) to start fresh")
+	}
+	// Unversioned SL-061/SL-066 database: step 2 adds LastUsedAt only if it is missing
+	return 1, nil
+}
+
+// RunMigrations brings the database to the latest schema version.
+func RunMigrations(db *sqlx.DB) error {
+	from, err := currentVersion(db)
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS SchemaVersion (
+		Version   INTEGER PRIMARY KEY NOT NULL,
+		Name      TEXT NOT NULL,
+		AppliedAt TEXT NOT NULL
+	)`); err != nil {
+		return fmt.Errorf("create SchemaVersion: %w", err)
+	}
+	if from > SchemaVersionLatest {
+		return fmt.Errorf("database schema version %d is newer than this server supports (%d); upgrade the server", from, SchemaVersionLatest)
+	}
+
+	for _, m := range migrationSteps {
+		if m.version <= from {
+			continue
+		}
+		tx, err := db.Beginx()
+		if err != nil {
+			return err
+		}
+		if err := m.apply(tx); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("migration %d (%s): %w", m.version, m.name, err)
+		}
+		if _, err := tx.Exec("INSERT OR REPLACE INTO SchemaVersion (Version, Name, AppliedAt) VALUES (?, ?, ?)",
+			m.version, m.name, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("record migration %d: %w", m.version, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %d: %w", m.version, err)
+		}
+		log.Info().Int("version", m.version).Str("name", m.name).Msg("Applied database migration")
+	}
+	log.Info().Int("schemaVersion", SchemaVersionLatest).Msg("Database schema up to date")
 	return nil
 }
