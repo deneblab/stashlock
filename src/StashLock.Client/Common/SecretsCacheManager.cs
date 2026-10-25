@@ -12,13 +12,37 @@ namespace Deneblab.StashLock.Client.Common;
 /// <summary>
 /// Manages encrypted cache files for offline secret access.
 /// Cache is machine-bound via HKDF key derivation from private key + machine identity.
+/// Format SLC2: magic | createdAt | TTL | nonce | length | ciphertext | tag. The header and the
+/// cache file name (stashlock.cache.box.tag.version.bin) are AES-GCM associated data, so changing
+/// the TTL or copying the file over another entry's cache is detected. SLC1 files are ignored.
 /// </summary>
 internal static class SecretsCacheManager
 {
     private const int NonceSize = 12;
     private const int TagSize = 16;
-    private static readonly byte[] Magic = Encoding.ASCII.GetBytes("SLC1");
-    private static readonly byte[] HkdfSalt = SHA256.HashData(Encoding.UTF8.GetBytes("stashlock-cache-v1"));
+    private static readonly byte[] Magic = Encoding.ASCII.GetBytes("SLC2");
+    private static readonly byte[] HkdfSalt = SHA256.HashData(Encoding.UTF8.GetBytes("stashlock-cache-v2"));
+    private const int HeaderSize = 4 + 8 + 4 + NonceSize;
+
+    // Header bytes + file name, authenticated by AES-GCM
+    private static byte[] AssociatedData(byte[] header, string filePath)
+    {
+        var name = Encoding.UTF8.GetBytes(Path.GetFileName(filePath));
+        var aad = new byte[header.Length + name.Length];
+        Buffer.BlockCopy(header, 0, aad, 0, header.Length);
+        Buffer.BlockCopy(name, 0, aad, header.Length, name.Length);
+        return aad;
+    }
+
+    private static byte[] Header(long createdTicks, int ttlSeconds, byte[] nonce)
+    {
+        var header = new byte[HeaderSize];
+        Buffer.BlockCopy(Magic, 0, header, 0, 4);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(header.AsSpan(4, 8), createdTicks);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12, 4), ttlSeconds);
+        Buffer.BlockCopy(nonce, 0, header, 16, NonceSize);
+        return header;
+    }
 
     /// <summary>
     /// Derives a machine-bound cache encryption key using HKDF-SHA256.
@@ -46,10 +70,13 @@ internal static class SecretsCacheManager
 
         var ciphertext = new byte[plaintext.Length];
         var tag = new byte[TagSize];
+        var createdTicks = DateTimeOffset.UtcNow.UtcTicks;
+        var ttlSeconds = (int)ttl.TotalSeconds;
+        var header = Header(createdTicks, ttlSeconds, nonce);
 
         using (var aes = new AesGcm(cacheKey, TagSize))
         {
-            aes.Encrypt(nonce, plaintext, ciphertext, tag);
+            aes.Encrypt(nonce, plaintext, ciphertext, tag, AssociatedData(header, filePath));
         }
 
         var dir = Path.GetDirectoryName(filePath);
@@ -63,10 +90,7 @@ internal static class SecretsCacheManager
             using (var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
             using (var bw = new BinaryWriter(fs))
             {
-                bw.Write(Magic);                                    // 4 bytes: "SLC1"
-                bw.Write(DateTimeOffset.UtcNow.UtcTicks);          // 8 bytes: CreatedAt
-                bw.Write((int)ttl.TotalSeconds);                   // 4 bytes: TTL seconds
-                bw.Write(nonce);                                    // 12 bytes: nonce
+                bw.Write(header);                                   // 28 bytes: "SLC2" | CreatedAt | TTL | nonce
                 bw.Write(ciphertext.Length);                        // 4 bytes: ciphertext length
                 bw.Write(ciphertext);                               // N bytes: ciphertext
                 bw.Write(tag);                                      // 16 bytes: auth tag
@@ -110,11 +134,17 @@ internal static class SecretsCacheManager
             var magic = br.ReadBytes(4);
             if (magic.Length != 4 || magic[0] != Magic[0] || magic[1] != Magic[1] ||
                 magic[2] != Magic[2] || magic[3] != Magic[3])
+            {
+                log.LogDebug("Cache miss {File}: unknown or old cache format (rebuilt on the next server fetch)", file);
                 return null;
+            }
 
             var createdTicks = br.ReadInt64();
             var ttlSeconds = br.ReadInt32();
             var nonce = br.ReadBytes(NonceSize);
+            if (nonce.Length != NonceSize)
+                return null;
+            var header = Header(createdTicks, ttlSeconds, nonce);
             var ciphertextLength = br.ReadInt32();
             var ciphertext = br.ReadBytes(ciphertextLength);
             var tag = br.ReadBytes(TagSize);
@@ -139,7 +169,7 @@ internal static class SecretsCacheManager
             var plaintext = new byte[ciphertextLength];
             using (var aes = new AesGcm(cacheKey, TagSize))
             {
-                aes.Decrypt(nonce, ciphertext, tag, plaintext);
+                aes.Decrypt(nonce, ciphertext, tag, plaintext, AssociatedData(header, filePath));
             }
 
             var json = Encoding.UTF8.GetString(plaintext);

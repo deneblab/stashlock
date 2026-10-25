@@ -36,16 +36,27 @@ internal class GenerateCommands
     /// Examples:
     ///   stashlock encode ./my-vault/secrets.json
     ///   stashlock encode ./my-vault/secrets.json --verbose
+    ///   stashlock encode ./my-vault/secrets.json --format 1   # for clients older than SOPS v2
     /// </summary>
     /// <param name="file">Path to the plaintext JSON secrets file</param>
     /// <param name="verbose">Show resolved configuration before encoding</param>
+    /// <param name="format">SOPS file format: 2 (default) or 1 for clients that cannot read v2 yet</param>
     /// <param name="cancellationToken">Cancellation token</param>
     [Command("")]
     public Task<int> Root(
         [Argument] string file,
         bool verbose = false,
+        int format = 2,
         CancellationToken cancellationToken = default)
     {
+        if (format != 1 && format != 2)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Error: --format must be 1 or 2 (got {format})");
+            Console.ResetColor();
+            return Task.FromResult(ExitCodes.Error);
+        }
+
         var secretFilePath = Path.IsPathFullyQualified(file)
             ? file
             : Path.GetFullPath(file);
@@ -135,6 +146,7 @@ internal class GenerateCommands
         }
 
         var mode = config.EncryptionMode ?? "sops";
+        var modeLabel = mode.Equals("sops", StringComparison.OrdinalIgnoreCase) ? (format == 2 ? SopsCodec.ModeV2 : SopsCodec.ModeV1) : mode;
         var inputBaseName = Path.GetFileNameWithoutExtension(secretFilePath);
         var jsonOptions = new JsonSerializerOptions
         {
@@ -151,7 +163,7 @@ internal class GenerateCommands
 
             if (mode.Equals("sops", StringComparison.OrdinalIgnoreCase))
             {
-                outputJson = GenerateSopsMode(secretsDict, keyPair, vaultKey, jsonOptions);
+                outputJson = GenerateSopsMode(secretsDict, keyPair, vaultKey, jsonOptions, format);
                 outputFileName = $"stashlock.enc.{tag}.{inputBaseName}.json";
             }
             else
@@ -165,13 +177,13 @@ internal class GenerateCommands
 
             _log.LogInformation("Generated encrypted file for tag {Tag}: {File} (mode: {Mode})", tag, outputPath, mode);
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"Generated: {outputFileName}  (vault key: {vaultKey}, mode: {mode})");
+            Console.WriteLine($"Generated: {outputFileName}  (vault key: {vaultKey}, mode: {modeLabel})");
             Console.ResetColor();
             generated++;
         }
 
         Console.WriteLine();
-        Console.WriteLine($"Encode complete: {generated} encrypted file(s) created (mode: {mode}).");
+        Console.WriteLine($"Encode complete: {generated} encrypted file(s) created (mode: {modeLabel}).");
         return Task.FromResult(ExitCodes.Ok);
     }
 
@@ -179,40 +191,10 @@ internal class GenerateCommands
         Dictionary<string, string> secrets,
         KeyPairModel keyPair,
         string vaultKey,
-        JsonSerializerOptions jsonOptions)
+        JsonSerializerOptions jsonOptions,
+        int format)
     {
-        var dataKey = AesGcmHelper.GenerateDataKey();
-
-        // Encrypt each value
-        var encryptedValues = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var kvp in secrets)
-        {
-            encryptedValues[kvp.Key] = AesGcmHelper.EncryptValue(dataKey, kvp.Value);
-        }
-
-        // Compute MAC
-        var mac = AesGcmHelper.ComputeMac(dataKey, encryptedValues);
-        var macEncrypted = AesGcmHelper.EncryptValue(dataKey, Convert.ToBase64String(mac));
-
-        // Wrap data key with recipient's public key
-        var wrappedDataKey = EciesModule.Seal(dataKey, keyPair.GetPublicKeyBytes());
-
-        // Build output
-        var output = new SopsEncryptedFile
-        {
-            Values = new Dictionary<string, string>(encryptedValues),
-            Metadata = new SopsMetadata
-            {
-                VaultKey = vaultKey,
-                Mode = "sops",
-                DataKey = Convert.ToBase64String(wrappedDataKey),
-                Mac = macEncrypted
-            }
-        };
-
-        // Clear data key from memory
-        System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
-
+        var output = SopsCodec.Encrypt(secrets, keyPair.GetPublicKeyBytes(), vaultKey, format);
         return JsonSerializer.Serialize(output, jsonOptions);
     }
 

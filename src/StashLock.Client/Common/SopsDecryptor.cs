@@ -16,45 +16,20 @@ namespace Deneblab.StashLock.Client.Common;
 internal static class SopsDecryptor
 {
     /// <summary>
-    ///     Decrypts a SOPS-mode encrypted file to a flat dictionary of plaintext values.
+    ///     Decrypts a SOPS-mode encrypted file (v1 "sops" or v2 "sops-v2") to a flat dictionary of plaintext values.
+    ///     For v2 files, <paramref name="expectedVaultKey"/> (box.tag.version) is checked against the file.
     /// </summary>
-    public static Dictionary<string, string> DecryptSops(SopsEncryptedFile sopsFile, byte[] privateKeyBytes)
+    public static Dictionary<string, string> DecryptSops(SopsEncryptedFile sopsFile, byte[] privateKeyBytes, string expectedVaultKey = null)
     {
         if (sopsFile == null) throw new ArgumentNullException(nameof(sopsFile));
         if (privateKeyBytes == null) throw new ArgumentNullException(nameof(privateKeyBytes));
-
-        // Unwrap data key
-        var wrappedDataKey = Convert.FromBase64String(sopsFile.Metadata.DataKey);
-        byte[] dataKey;
         try
         {
-            dataKey = EciesDecryptor.Open(wrappedDataKey, privateKeyBytes);
+            return SopsCodec.Decrypt(sopsFile, privateKeyBytes, expectedVaultKey);
         }
-        catch (DecryptionException ex)
+        catch (CryptographicException ex)
         {
-            throw new DecryptionException("Failed to unwrap SOPS data key — wrong private key?", ex);
-        }
-
-        try
-        {
-            // Verify MAC
-            var macBase64 = AesGcmHelper.DecryptValue(dataKey, sopsFile.Metadata.Mac);
-            var expectedMac = Convert.FromBase64String(macBase64);
-            var sortedValues = new SortedDictionary<string, string>(sopsFile.Values, StringComparer.Ordinal);
-
-            if (!AesGcmHelper.VerifyMac(dataKey, sortedValues, expectedMac))
-                throw new DecryptionException("SOPS MAC verification failed — data may be tampered");
-
-            // Decrypt all values
-            var result = new Dictionary<string, string>();
-            foreach (var kvp in sopsFile.Values)
-                result[kvp.Key] = AesGcmHelper.DecryptValue(dataKey, kvp.Value);
-
-            return result;
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(dataKey);
+            throw new DecryptionException(ex.Message, ex);
         }
     }
 
@@ -75,7 +50,7 @@ internal static class SopsDecryptor
     ///     Auto-detects the encryption mode from a JSON string and decrypts accordingly.
     ///     Returns a flat Dictionary&lt;string, string&gt; with colon-separated keys for nested values.
     /// </summary>
-    public static Dictionary<string, string> DecryptAutoDetect(string json, byte[] privateKeyBytes)
+    public static Dictionary<string, string> DecryptAutoDetect(string json, byte[] privateKeyBytes, string expectedVaultKey = null)
     {
         if (string.IsNullOrWhiteSpace(json)) throw new ArgumentNullException(nameof(json));
 
@@ -87,15 +62,15 @@ internal static class SopsDecryptor
 
         var root = doc.RootElement;
 
-        // SOPS mode: has "_stashlock" metadata with mode="sops"
+        // SOPS mode: has "_stashlock" metadata with mode "sops" (v1) or "sops-v2"
         if (root.TryGetProperty("_stashlock", out var metadata) &&
             metadata.TryGetProperty("mode", out var modeEl) &&
-            modeEl.GetString() == "sops")
+            SopsCodec.IsSops(modeEl.GetString()))
         {
             var sopsFile = JsonSerializer.Deserialize<SopsEncryptedFile>(json);
             if (sopsFile == null) throw new DecryptionException("Failed to parse SOPS encrypted file");
 
-            return DecryptSops(sopsFile, privateKeyBytes);
+            return DecryptSops(sopsFile, privateKeyBytes, expectedVaultKey);
         }
 
         // Whole-file mode: has "VaultKey" and "EncryptedData"

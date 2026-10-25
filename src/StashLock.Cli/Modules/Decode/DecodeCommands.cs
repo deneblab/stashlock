@@ -143,70 +143,29 @@ internal class DecodeCommands
         }
 
         var vaultKey = sopsFile.Metadata.VaultKey;
-        _log.LogInformation("Decoding SOPS file, vaultKey: {VaultKey}", vaultKey);
+        _log.LogInformation("Decoding SOPS file ({Mode}), vaultKey: {VaultKey}", sopsFile.Metadata.Mode, vaultKey);
 
         // Load private key
         var keyPair = LoadKeyFile(vaultKey, keyOverride, fileDir);
         if (keyPair == null)
             return null!;
 
-        // Unwrap data key
-        byte[] dataKey;
+        Dictionary<string, string> decrypted;
         try
         {
-            var wrappedDataKey = Convert.FromBase64String(sopsFile.Metadata.DataKey);
-            dataKey = EciesModule.Open(wrappedDataKey, keyPair.GetPrivateKeyBytes());
+            decrypted = SopsCodec.Decrypt(sopsFile, keyPair.GetPrivateKeyBytes());
         }
         catch (Exception ex)
         {
-            PrintError($"Error: Failed to unwrap data key — {ex.Message}");
-            _log.LogError(ex, "Failed to unwrap data key");
+            PrintError($"Error: {ex.Message}");
+            _log.LogError(ex, "SOPS decryption failed");
             return null!;
         }
-
-        // Verify MAC
-        try
-        {
-            var macBase64 = AesGcmHelper.DecryptValue(dataKey, sopsFile.Metadata.Mac);
-            var expectedMac = Convert.FromBase64String(macBase64);
-            var encryptedValues = new SortedDictionary<string, string>(sopsFile.Values, StringComparer.Ordinal);
-
-            if (!AesGcmHelper.VerifyMac(dataKey, encryptedValues, expectedMac))
-            {
-                PrintError("Error: MAC verification failed — file may have been tampered with");
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
-                return null!;
-            }
-        }
-        catch (Exception ex)
-        {
-            PrintError($"Error: MAC verification failed — {ex.Message}");
-            System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
-            return null!;
-        }
-
-        // Decrypt all values
-        var decrypted = new Dictionary<string, string>();
-        try
-        {
-            foreach (var kvp in sopsFile.Values)
-            {
-                decrypted[kvp.Key] = AesGcmHelper.DecryptValue(dataKey, kvp.Value);
-            }
-        }
-        catch (Exception ex)
-        {
-            PrintError($"Error: Failed to decrypt value — {ex.Message}");
-            System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
-            return null!;
-        }
-
-        System.Security.Cryptography.CryptographicOperations.ZeroMemory(dataKey);
 
         // Unflatten colon-separated keys back to nested JSON
         var nested = UnflattenToJsonElement(decrypted);
 
-        _log.LogInformation("Successfully decoded {Count} values (sops mode)", decrypted.Count);
+        _log.LogInformation("Successfully decoded {Count} values ({Mode})", decrypted.Count, sopsFile.Metadata.Mode);
         return JsonSerializer.Serialize(nested, WriteOptions);
     }
 

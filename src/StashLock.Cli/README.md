@@ -35,9 +35,15 @@ stashlock encode ./my-vault/secrets.json
 
 Reads a plaintext JSON secrets file, encrypts it with each tag's public key using sealed box encryption, and outputs encrypted files (`stashlock.enc.{tag}.secrets.json`).
 
-Two encryption modes are supported:
+Two encryption modes are supported (`EncryptionMode` in `stashlock.config.json`):
 - **SOPS mode** (default) — field-level encryption with MAC verification
 - **Whole-file mode** — encrypts entire JSON as a single blob
+
+SOPS files are written in format **v2** (`"mode": "sops-v2"`). Clients from before v2 cannot read them: update your applications (`Deneblab.StashLock.Client`) first, then re-encode and publish. During the transition, `--format 1` writes the older format. `decode` and the client read both formats.
+
+```bash
+stashlock encode ./my-vault/secrets.json --format 1   # only while some apps still use an older client
+```
 
 ### 4. Decrypt secrets
 
@@ -148,6 +154,13 @@ config     keypairs    encrypted   uploaded      plaintext
 - **Nonce:** 12 bytes (random per encryption)
 - **Auth Tag:** 16 bytes
 - **Output format:** ephemeral public key (32B) || nonce (12B) || ciphertext || tag (16B)
+
+SOPS mode: a random 32-byte data key encrypts the values and is itself sealed with ECIES for the tag's public key.
+
+| | v1 (`sops`) | v2 (`sops-v2`, default) |
+|---|---|---|
+| Value encryption | AES-256-GCM with the data key | AES-256-GCM with an HKDF-derived encryption key; the key path (e.g. `Db:Password`) is authenticated data, so a value cannot be moved to another key |
+| MAC | HMAC-SHA256 with the data key over concatenated keys and values | HMAC-SHA256 with a separate HKDF-derived key over length-prefixed fields, including the vault key (`box.tag.version`) |
 
 ## Environment Variables
 

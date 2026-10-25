@@ -77,6 +77,8 @@ var store = await StashLock.CreateClient()
     .OpenAsync();
 ```
 
+Cache files (`stashlock.cache.box.tag.version.bin`, format `SLC2`) are AES-256-GCM encrypted with a key derived from the private key and the machine/user; the header (creation time, TTL) and the file name are authenticated, so editing the TTL or copying a cache file over another entry is detected and the file is ignored. Cache files from earlier versions (`SLC1`) are ignored and rebuilt on the next successful server fetch. For SOPS v2 files the client also checks that the file belongs to the requested `box.tag.version`.
+
 The cache answers only when the server cannot: connection errors, timeouts and 5xx responses. A rejected key (401/403) or a missing entry (404) is reported at once and never answered from the cache, so revoking an API key takes effect immediately.
 
 ### Cache-first strategy

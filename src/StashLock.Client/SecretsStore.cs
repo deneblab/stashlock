@@ -357,8 +357,8 @@ internal class SecretsStore : ISecretsStore
                 lf.CreateLogger("Deneblab.StashLock.Client.Http"));
             var encryptedBase64 = await httpClient.GetAsync(webKeySafeUrl, cancellationToken);
 
-            // Auto-detect: try SOPS/whole-file JSON first, fall back to raw ECIES blob
-            var dictionary = Common.SopsDecryptor.DecryptAutoDetect(encryptedBase64, privateKeyBytes);
+            // SOPS (v1/v2) or whole-file JSON; v2 files must belong to the requested box.tag.version
+            var dictionary = Common.SopsDecryptor.DecryptAutoDetect(encryptedBase64, privateKeyBytes, webKey);
             log.LogInformation("Opened remote vault {Box}.{Tag}.{Version} ({Count} entries)", box, tag, version, dictionary.Count);
             return FromPlainDictionary(dictionary);
         }
