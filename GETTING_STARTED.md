@@ -88,10 +88,10 @@ stashlock init ./my-vault --name myapp --tags production,develop --url http://lo
 ```
 
 This creates:
-- `stashlock.config.json` — vault configuration (name, tags, server URL; safe to commit)
+- `stashlock.config.json` — vault configuration (name, tags, server URL, optionally API keys per tag)
 - `stashlock.key.production.json` — X25519 key pair for the `production` tag
 - `stashlock.key.develop.json` — X25519 key pair for the `develop` tag
-- `.gitignore` entry `stashlock.key.*.json`, so key files are not committed
+- `.gitignore` entries `stashlock.config.json` and `stashlock.key.*.json`, so the config (which may hold API keys) and key files are not committed
 
 Without `--name` the vault is named after its directory (`my-vault` → `my-vault`).
 
@@ -106,6 +106,7 @@ Without `--name` the vault is named after its directory (`my-vault` → `my-vaul
   "Tags": ["production", "develop"],
   "Version": "00001",
   "ServerUrl": "http://localhost:8099",
+  // "ApiKeys": { "production": "slk_...", "develop": "slk_..." },   // optional, see step 6
   // "Skeleton": { ... }   // optional, see the CLI README
 }
 ```
@@ -168,13 +169,24 @@ Output:
 Publish complete: 1 published, 0 failed.
 ```
 
-You can also use environment variables instead of flags (the URL may also come from `ServerUrl` in `stashlock.config.json`; the API key never does):
+You can also use environment variables instead of flags (the URL may also come from `ServerUrl` in `stashlock.config.json`):
 
 ```bash
 export STASHLOCK_API_URL=http://localhost:8099
 export STASHLOCK_API_KEY=slk_...   # API key for myapp.production
 stashlock publish ./my-vault/stashlock.enc.production.secrets.json
 ```
+
+Or keep one API key per tag in `stashlock.config.json` (`--api-key` and `STASHLOCK_API_KEY` still take precedence):
+
+```jsonc
+  "ApiKeys": {
+    "production": "slk_...",
+    "develop": "slk_..."
+  },
+```
+
+Then `stashlock publish ./my-vault` sends each file with the key of its own tag, and `stashlock cstring ./my-vault --tag production` puts the `production` key into the connection string. The file is in `.gitignore` (added by `stashlock init`); if it is not, the CLI warns on stderr when it reads a key from it.
 
 ### 7. Verify (optional)
 
@@ -188,13 +200,13 @@ stashlock decode ./my-vault/stashlock.enc.production.secrets.json
 
 | File | Commit to git? |
 |------|----------------|
-| `stashlock.config.json` | Yes |
+| `stashlock.config.json` | **No** when it holds `ApiKeys` — `stashlock init` adds it to `.gitignore`; without keys it is safe to commit (remove the line from `.gitignore`) |
 | `secrets.json`, `secrets.<tag>.json` (plaintext) | **No** — add to `.gitignore` |
 | `stashlock.enc.*.json` (encrypted) | Yes — safe to commit |
 | `stashlock.skeleton.*.json` (key names only, optional) | Yes — safe to commit |
 | `stashlock.key.*.json` (key pairs) | **No** — share securely, never commit |
 
-`stashlock init` already added `stashlock.key.*.json` to `.gitignore`. Add the plaintext files yourself:
+`stashlock init` already added `stashlock.config.json` and `stashlock.key.*.json` to `.gitignore`. Add the plaintext files yourself:
 
 ```
 secrets.json

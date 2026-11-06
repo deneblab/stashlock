@@ -17,13 +17,17 @@ internal static class ConfigTemplate
 
     public static string Render(string name, IReadOnlyList<string> tags, string version, string serverUrl)
     {
+        IReadOnlyList<string> apiKeyTags = tags.Count > 0 ? tags : ["production"];
+        var apiKeyLines = string.Join(",\n", apiKeyTags.Select(t => $"  //   {Json(t)}: \"slk_...\""));
+
         var serverLine = string.IsNullOrWhiteSpace(serverUrl)
             ? "  // \"ServerUrl\": \"https://vault.example.com\","
             : $"  \"ServerUrl\": {Json(serverUrl)},";
 
         return $$"""
             // StashLock vault configuration (JSON with comments).
-            // Commit this file; never commit stashlock.key.*.json (private keys).
+            // `stashlock init` adds this file and stashlock.key.*.json (private keys) to .gitignore:
+            // it may hold API keys (ApiKeys below), so do not commit it.
             {
               // Box name on the server. With a tag and the version it forms the vault key <Name>.<tag>.<Version>.
               "Name": {{Json(name)}},
@@ -37,8 +41,13 @@ internal static class ConfigTemplate
               "Version": {{Json(version)}},
 
               // Server for `stashlock publish` and `stashlock cstring`; --url and STASHLOCK_API_URL take precedence.
-              // API keys never go into this file: use --api-key or STASHLOCK_API_KEY.
             {{serverLine}}
+
+              // API key per tag (created by an admin for <Name>.<tag>) for `stashlock publish` and `stashlock cstring`;
+              // --api-key and STASHLOCK_API_KEY take precedence. Keep this file out of git when it holds keys.
+              // "ApiKeys": {
+            {{apiKeyLines}}
+              // },
 
               // Public skeleton of the secrets. When this section is present, `stashlock encode <FILE>.json`
               // also writes stashlock.skeleton.<FILE>.json: the key names of every tag, each value replaced

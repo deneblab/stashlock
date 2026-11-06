@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -29,10 +30,13 @@ internal class PublishCommands
     ///   stashlock publish ./my-vault/stashlock.enc.production.secrets.json
     ///   stashlock publish ./my-vault --url https://vault.example.com --api-key mykey123
     ///   stashlock publish ./my-vault --verbose --expires-in 3600
+    ///
+    /// The API key is chosen per file: --api-key, then STASHLOCK_API_KEY, then ApiKeys.<tag>
+    /// in stashlock.config.json (tag taken from the file's vault key).
     /// </summary>
     /// <param name="path">Path to stashlock.enc.*.json file or directory containing them</param>
     /// <param name="url">API base URL (falls back to STASHLOCK_API_URL env var, then ServerUrl in stashlock.config.json)</param>
-    /// <param name="apiKey">API key for the box.tag (falls back to STASHLOCK_API_KEY env var)</param>
+    /// <param name="apiKey">API key for the box.tag (falls back to STASHLOCK_API_KEY env var, then ApiKeys.&lt;tag&gt; in stashlock.config.json)</param>
     /// <param name="expiresIn">TTL in seconds for the published secret</param>
     /// <param name="verbose">Show resolved configuration before publishing</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -94,11 +98,11 @@ internal class PublishCommands
             return ExitCodes.Error;
         }
 
-        // Resolve API key: flag > env var (never from the config file)
-        var resolvedApiKey = ServerSettings.ResolveApiKey(apiKey);
-        if (resolvedApiKey == null)
+        // Resolve API key: flag > env var > ApiKeys.<tag> in the config (per file, below)
+        var sharedKey = ServerSettings.ResolveApiKey(apiKey);
+        if (sharedKey == null && config?.ApiKeys is not { Count: > 0 })
         {
-            PrintError($"Error: No API key. Use --api-key or set {ServerSettings.ApiKeyEnvVar} (an API key created for the box.tag).");
+            PrintError($"Error: No API key — {ServerSettings.ApiKeyHint(null)} (an API key created for the box.tag).");
             return ExitCodes.Error;
         }
 
@@ -106,7 +110,10 @@ internal class PublishCommands
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.Error.WriteLine($"  API URL:    {apiUrl}");
-            Console.Error.WriteLine($"  API Key:    {resolvedApiKey[..Math.Min(8, resolvedApiKey.Length)]}...");
+            if (sharedKey != null)
+                Console.Error.WriteLine($"  API Key:    {Mask(sharedKey.Value)} ({SourceName(sharedKey.Source)})");
+            else
+                Console.Error.WriteLine($"  API Keys:   per tag from {VaultConfig.FileName} ({string.Join(", ", config!.ApiKeys!.Keys)})");
             Console.Error.WriteLine($"  Config:     {(config != null ? VaultConfig.PathIn(configDir) : "(not found)")}");
             Console.Error.WriteLine($"  Files:      {files.Length}");
             if (expiresIn.HasValue)
@@ -119,47 +126,83 @@ internal class PublishCommands
 
         var published = 0;
         var failed = 0;
+        var warnedAboutConfigKey = false;
 
-        using var client = new StashLockApiClient(apiUrl, resolvedApiKey);
-
-        for (var i = 0; i < files.Length; i++)
+        // One client per distinct API key (files of several tags can be published in one run)
+        var clients = new Dictionary<string, StashLockApiClient>(StringComparer.Ordinal);
+        try
         {
-            var file = files[i];
-            var fileName = Path.GetFileName(file);
-            if (files.Length > 1)
-                Console.Write($"[{i + 1}/{files.Length}] ");
-            var content = await File.ReadAllTextAsync(file, cancellationToken);
-
-            var vaultKey = VaultKeyExtractor.Extract(content);
-            if (string.IsNullOrEmpty(vaultKey))
+            for (var i = 0; i < files.Length; i++)
             {
-                PrintError($"  {fileName}: Could not extract vault key — skipped");
-                failed++;
-                continue;
-            }
+                var file = files[i];
+                var fileName = Path.GetFileName(file);
+                if (files.Length > 1)
+                    Console.Write($"[{i + 1}/{files.Length}] ");
+                var content = await File.ReadAllTextAsync(file, cancellationToken);
 
-            _log.LogInformation("Publishing {File} with vault key {VaultKey}", fileName, vaultKey);
+                var vaultKey = VaultKeyExtractor.Extract(content);
+                if (string.IsNullOrEmpty(vaultKey))
+                {
+                    PrintError($"  {fileName}: Could not extract vault key — skipped");
+                    failed++;
+                    continue;
+                }
 
-            var result = await client.PublishAsync(vaultKey, content, expiresIn, cancellationToken);
+                var fileTag = VaultKeyExtractor.TagOf(vaultKey);
+                var key = sharedKey ?? ServerSettings.ResolveApiKey(null, config, fileTag);
+                if (key == null)
+                {
+                    PrintError($"  {fileName}: No API key for tag '{fileTag}' — {ServerSettings.ApiKeyHint(fileTag)}");
+                    failed++;
+                    continue;
+                }
 
-            if (result.IsSuccess)
-            {
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"  {fileName}: Published (key: {result.ServerKey})");
-                Console.ResetColor();
-                published++;
+                if (!warnedAboutConfigKey && key.Source == ApiKeySource.Config)
+                {
+                    ServerSettings.WarnIfConfigKeyNotIgnored(key, configDir);
+                    warnedAboutConfigKey = true;
+                }
+
+                if (!clients.TryGetValue(key.Value, out var client))
+                    clients[key.Value] = client = new StashLockApiClient(apiUrl, key.Value);
+
+                _log.LogInformation("Publishing {File} with vault key {VaultKey} (API key from {Source})", fileName, vaultKey, SourceName(key.Source));
+
+                var result = await client.PublishAsync(vaultKey, content, expiresIn, cancellationToken);
+
+                if (result.IsSuccess)
+                {
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"  {fileName}: Published (key: {result.ServerKey})");
+                    Console.ResetColor();
+                    published++;
+                }
+                else
+                {
+                    PrintError($"  {fileName}: Failed (HTTP {result.StatusCode}) — {result.ErrorDetail}");
+                    failed++;
+                }
             }
-            else
-            {
-                PrintError($"  {fileName}: Failed (HTTP {result.StatusCode}) — {result.ErrorDetail}");
-                failed++;
-            }
+        }
+        finally
+        {
+            foreach (var c in clients.Values)
+                c.Dispose();
         }
 
         Console.WriteLine();
         Console.WriteLine($"Publish complete: {published} published, {failed} failed.");
         return failed == 0 ? ExitCodes.Ok : published > 0 ? ExitCodes.Partial : ExitCodes.Error;
     }
+
+    private static string Mask(string key) => $"{key[..Math.Min(8, key.Length)]}...";
+
+    private static string SourceName(ApiKeySource source) => source switch
+    {
+        ApiKeySource.Flag => "--api-key",
+        ApiKeySource.Environment => ServerSettings.ApiKeyEnvVar,
+        _ => VaultConfig.FileName
+    };
 
     private static void PrintError(string message)
     {

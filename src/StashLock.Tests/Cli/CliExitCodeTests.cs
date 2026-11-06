@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -101,6 +102,83 @@ public class CliExitCodeTests : IDisposable
         var code = await new PublishCommands(NullLogger<PublishCommands>.Instance).Root(vault, url: server.Url, apiKey: "slk_test");
         Assert.Equal(ExitCodes.Error, code);
     }
+
+    [Fact]
+    public async Task Publish_ApiKeysFromConfig_UsesKeyOfEachFilesTag()
+    {
+        var vault = Vault("dev,prod");
+        Environment.SetEnvironmentVariable("STASHLOCK_API_KEY", null);
+        WriteConfigWithApiKeys(vault, "\"dev\": \"slk_dev\", \"PROD\": \"slk_prod\"");
+        using var server = new FakeServer(_ => 200);
+
+        var code = await new PublishCommands(NullLogger<PublishCommands>.Instance).Root(vault, url: server.Url);
+
+        Assert.Equal(ExitCodes.Ok, code);
+        var auth = server.Requests.ToDictionary(r => DecodeKey(r.Path), r => r.Authorization);
+        Assert.Equal("Bearer slk_dev", auth["vault.dev.00001"]);
+        Assert.Equal("Bearer slk_prod", auth["vault.prod.00001"]);
+    }
+
+    [Fact]
+    public async Task Publish_FlagOverridesApiKeysFromConfig()
+    {
+        var vault = Vault("dev");
+        WriteConfigWithApiKeys(vault, "\"dev\": \"slk_dev\"");
+        using var server = new FakeServer(_ => 200);
+
+        Assert.Equal(ExitCodes.Ok, await new PublishCommands(NullLogger<PublishCommands>.Instance).Root(vault, url: server.Url, apiKey: "slk_flag"));
+        Assert.Equal("Bearer slk_flag", Assert.Single(server.Requests).Authorization);
+    }
+
+    [Fact]
+    public async Task Publish_TagMissingFromApiKeys_FailsOnlyThatFile()
+    {
+        var vault = Vault("dev,prod");
+        Environment.SetEnvironmentVariable("STASHLOCK_API_KEY", null);
+        WriteConfigWithApiKeys(vault, "\"dev\": \"slk_dev\"");
+        using var server = new FakeServer(_ => 200);
+
+        var code = await new PublishCommands(NullLogger<PublishCommands>.Instance).Root(vault, url: server.Url);
+
+        Assert.Equal(ExitCodes.Partial, code);
+        Assert.Equal("vault.dev.00001", DecodeKey(Assert.Single(server.Requests).Path));
+    }
+
+    [Fact]
+    public async Task Publish_KeyFromConfigNotGitIgnored_Warns()
+    {
+        var vault = Vault("dev");
+        Environment.SetEnvironmentVariable("STASHLOCK_API_KEY", null);
+        WriteConfigWithApiKeys(vault, "\"dev\": \"slk_dev\"");
+        File.Delete(Path.Combine(vault, ".gitignore"));
+        using var server = new FakeServer(_ => 200);
+
+        var err = new StringWriter();
+        var oldErr = Console.Error;
+        Console.SetError(err);
+        try
+        {
+            Assert.Equal(ExitCodes.Ok, await new PublishCommands(NullLogger<PublishCommands>.Instance).Root(vault, url: server.Url));
+        }
+        finally
+        {
+            Console.SetError(oldErr);
+        }
+
+        Assert.Contains("is not in .gitignore", err.ToString());
+    }
+
+    [Fact]
+    public void Init_AddsConfigAndKeyFilesToGitIgnore()
+    {
+        var gitignore = File.ReadAllLines(Path.Combine(Vault("dev"), ".gitignore"));
+        Assert.Contains("stashlock.config.json", gitignore);
+        Assert.Contains("stashlock.key.*.json", gitignore);
+    }
+
+    private static void WriteConfigWithApiKeys(string vault, string apiKeys) =>
+        File.WriteAllText(Path.Combine(vault, "stashlock.config.json"),
+            "{ // comment\n \"Name\": \"vault\", \"Tags\": [\"dev\", \"prod\"], \"ApiKeys\": { " + apiKeys + " }, }");
 
     // "/boxes/{base64url(box.tag.version)}" → "box.tag.version"
     private static string DecodeKey(string path)

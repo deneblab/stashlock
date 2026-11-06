@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -16,6 +17,20 @@ public class StashlockConfig
 
     [JsonPropertyName("ServerUrl")]
     public string ServerUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// API keys per tag (tag → key, tag case-insensitive) for <c>publish</c> and <c>cstring</c>.
+    /// <c>--api-key</c> and <c>STASHLOCK_API_KEY</c> take precedence. Null (section absent) means none.
+    /// </summary>
+    [JsonPropertyName("ApiKeys")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? ApiKeys
+    {
+        get => _apiKeys;
+        set => _apiKeys = value == null ? null : new Dictionary<string, string>(value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private Dictionary<string, string>? _apiKeys;
 
     /// <summary>Public skeleton written by <c>encode</c>; null (section absent) means off.</summary>
     [JsonPropertyName("Skeleton")]

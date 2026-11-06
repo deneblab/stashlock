@@ -17,13 +17,14 @@ stashlock init ./my-vault --tags production,develop
 stashlock init ./my-vault --name myapp --tags production,develop --url https://vault.example.com
 ```
 
-Creates a `stashlock.config.json` with the specified environment tags, generates key files for each tag (file mode 0600) and adds `stashlock.key.*.json` to `.gitignore`. The vault name (the `box` in `box.tag.version`) is `--name`, or the target directory's name. Options: `--tags`/`-t`, `--name`, `--url`.
+Creates a `stashlock.config.json` with the specified environment tags, generates key files for each tag (file mode 0600) and adds `stashlock.config.json` and `stashlock.key.*.json` to `.gitignore` (the config may hold API keys). The vault name (the `box` in `box.tag.version`) is `--name`, or the target directory's name. Options: `--tags`/`-t`, `--name`, `--url`.
 
 The config is JSON with comments and lists every setting with a short description; optional ones are commented out:
 
 ```jsonc
 // StashLock vault configuration (JSON with comments).
-// Commit this file; never commit stashlock.key.*.json (private keys).
+// `stashlock init` adds this file and stashlock.key.*.json (private keys) to .gitignore:
+// it may hold API keys (ApiKeys below), so do not commit it.
 {
   // Box name on the server. With a tag and the version it forms the vault key <Name>.<tag>.<Version>.
   "Name": "exampleapp",
@@ -37,8 +38,14 @@ The config is JSON with comments and lists every setting with a short descriptio
   "Version": "00001",
 
   // Server for `stashlock publish` and `stashlock cstring`; --url and STASHLOCK_API_URL take precedence.
-  // API keys never go into this file: use --api-key or STASHLOCK_API_KEY.
   // "ServerUrl": "https://vault.example.com",
+
+  // API key per tag (created by an admin for <Name>.<tag>) for `stashlock publish` and `stashlock cstring`;
+  // --api-key and STASHLOCK_API_KEY take precedence. Keep this file out of git when it holds keys.
+  // "ApiKeys": {
+  //   "develop": "slk_...",
+  //   "production": "slk_..."
+  // },
 
   // Public skeleton of the secrets. When this section is present, `stashlock encode <FILE>.json`
   // also writes stashlock.skeleton.<FILE>.json: the key names of every tag, each value replaced
@@ -138,13 +145,17 @@ stashlock publish ./my-vault/stashlock.enc.production.secrets.json --url https:/
 # Publish all encrypted files in a directory (each file needs a key valid for its box.tag)
 stashlock publish ./my-vault
 
+# Same, with "ApiKeys": { "develop": "slk_...", "production": "slk_..." } in stashlock.config.json:
+# each file is sent with the key of its own tag
+stashlock publish ./my-vault
+
 # Publish with TTL (auto-expires after 3600 seconds)
 stashlock publish ./my-vault/stashlock.enc.production.secrets.json --expires-in 3600
 ```
 
 **Options:**
 - `--url <url>` — API base URL (falls back to `STASHLOCK_API_URL`, then `ServerUrl` in `stashlock.config.json`; required — there is no default server)
-- `--api-key <key>` — API key for the file's `box.tag` (falls back to `STASHLOCK_API_KEY`; never read from `stashlock.config.json`)
+- `--api-key <key>` — API key for the file's `box.tag`, used for every file (falls back to `STASHLOCK_API_KEY`, then `ApiKeys.<tag>` in `stashlock.config.json`, chosen per file by the tag in its vault key). A file whose tag has no key fails; the others are still published. When the key comes from the config and `stashlock.config.json` is not in the vault directory's `.gitignore`, a warning is printed on stderr.
 - `--expires-in <seconds>` — TTL in seconds for the published secret
 
 ### 6. Generate connection string
@@ -163,7 +174,7 @@ stashlock cstring ./my-vault --tag production --base64
 stashlock cstring ./my-vault --tag production --env
 ```
 
-Reads `stashlock.config.json` (ServerUrl, Name), `stashlock.key.{tag}.json` (PrivateKey) and the API key (`--api-key` or `STASHLOCK_API_KEY`), generates a connection string in `Key=Value;Key=Value` format.
+Reads `stashlock.config.json` (ServerUrl, Name), `stashlock.key.{tag}.json` (PrivateKey) and the API key of the selected tag (`--api-key`, `STASHLOCK_API_KEY` or `ApiKeys.<tag>` in `stashlock.config.json`), generates a connection string in `Key=Value;Key=Value` format.
 
 Output includes plain text, base64-encoded, and a copy-paste command (`export NAME="…"` on Linux/macOS, `set "NAME=…"` in Windows cmd). The plain string is also copied to the clipboard when `clip`, `pbcopy`, `wl-copy`, `xclip` or `xsel` is available.
 
@@ -231,7 +242,7 @@ Encrypted file (`"mode": "sops"`):
 |----------|---------|
 | `STASHLOCK_CONNECTION_STRING` | Full connection string (`Url=...;ApiKey=...;Box=...;Tag=...`) |
 | `STASHLOCK_API_URL` | Vault API base URL |
-| `STASHLOCK_API_KEY` | API key for one `box.tag` (created by a StashLock admin) |
+| `STASHLOCK_API_KEY` | API key for one `box.tag` (created by a StashLock admin); overrides `ApiKeys` in `stashlock.config.json` |
 
 ## Links
 

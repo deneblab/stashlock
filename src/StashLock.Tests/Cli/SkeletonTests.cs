@@ -83,6 +83,24 @@ public class SkeletonTests : IDisposable
     }
 
     [Fact]
+    public void InitConfig_ApiKeysExample_IsCommentedOut_AndReadWhenUncommented()
+    {
+        var text = ConfigTemplate.Render("app", new List<string> { "dev", "prod" }, "00001", "https://vault");
+        Assert.Null(JsonSerializer.Deserialize<StashlockConfig>(text, VaultConfig.ReadOptions)!.ApiKeys);
+
+        // Uncomment the "ApiKeys" block the way a user would
+        var lines = text.Split('\n');
+        var start = Array.FindIndex(lines, l => l.TrimStart().StartsWith("// \"ApiKeys\""));
+        var end = Array.FindIndex(lines, start, l => l.Trim() == "// },");
+        for (var i = start; i <= end; i++)
+            lines[i] = lines[i].Replace("// ", "");
+
+        var config = JsonSerializer.Deserialize<StashlockConfig>(string.Join('\n', lines), VaultConfig.ReadOptions)!;
+        Assert.Equal(new[] { "dev", "prod" }, config.ApiKeys!.Keys);
+        Assert.Equal("slk_...", config.ApiKeys["prod"]);
+    }
+
+    [Fact]
     public void UncommentedSkeletonSection_IsRead()
     {
         var vault = Vault("dev", skeleton: true, exclude: "\"Customers:*\"");

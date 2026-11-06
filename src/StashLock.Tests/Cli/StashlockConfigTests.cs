@@ -53,6 +53,22 @@ public class StashlockConfigTests
     }
 
     [Fact]
+    public void Deserialize_ApiKeys_FromJsonWithComments_TagCaseInsensitive()
+    {
+        var json = "{ // keys\n \"Name\": \"app\", \"ApiKeys\": { \"Production\": \"slk_p\" }, }";
+        var config = JsonSerializer.Deserialize<StashlockConfig>(json, Deneblab.StashLock.Cli.Common.VaultConfig.ReadOptions)!;
+
+        Assert.Equal("slk_p", config.ApiKeys!["production"]);
+    }
+
+    [Fact]
+    public void Deserialize_WithoutApiKeys_LeavesThemNull()
+    {
+        var config = JsonSerializer.Deserialize<StashlockConfig>("{\"Name\":\"app\"}")!;
+        Assert.Null(config.ApiKeys);
+    }
+
+    [Fact]
     public void Deserialize_ShouldHandleEmptyTags()
     {
         var json = "{\"Version\":\"00001\",\"Name\":\"test\",\"Tags\":[]}";

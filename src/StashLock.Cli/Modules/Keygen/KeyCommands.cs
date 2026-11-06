@@ -113,6 +113,8 @@ internal class KeyCommands
         {
             if (GitIgnore.EnsureKeyFilesIgnored(targetDir))
                 Console.WriteLine($"Updated .gitignore: {GitIgnore.KeyFilePattern}");
+            if (GitIgnore.EnsureConfigIgnored(targetDir))
+                Console.WriteLine($"Updated .gitignore: {GitIgnore.ConfigFilePattern}");
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.Error.WriteLine("WARNING: Keep key files secure. Do NOT commit them to version control.");
             Console.ResetColor();

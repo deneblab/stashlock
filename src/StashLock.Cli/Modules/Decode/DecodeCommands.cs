@@ -11,6 +11,7 @@ using Deneblab.StashLock.Cli.Common;
 using Deneblab.StashLock.Cli.Common.Security;
 using Deneblab.StashLock.Cli.Modules.Ecies;
 using Deneblab.StashLock.Cli.Modules.Encode;
+using Deneblab.StashLock.Cli.Modules.Publish;
 using Microsoft.Extensions.Logging;
 using Deneblab.StashLock.Shared.Crypto;
 using Deneblab.StashLock.Shared.Formats;
@@ -173,7 +174,7 @@ internal class DecodeCommands
         else
         {
             // Parse tag from vaultKey: "name.tag.version"
-            var tag = ParseTagFromVaultKey(vaultKey);
+            var tag = VaultKeyExtractor.TagOf(vaultKey);
             if (tag == null)
             {
                 PrintError($"Error: Cannot parse tag from vault key: {vaultKey}");
@@ -211,20 +212,6 @@ internal class DecodeCommands
             PrintError($"Error: Failed to read key file: {ex.Message}");
             return null;
         }
-    }
-
-    private static string? ParseTagFromVaultKey(string vaultKey)
-    {
-        if (string.IsNullOrEmpty(vaultKey))
-            return null;
-
-        // vaultKey format: "name.tag.version"
-        var parts = vaultKey.Split('.');
-        if (parts.Length < 3)
-            return null;
-
-        // Tag is the second-to-last part
-        return parts[^2];
     }
 
     private static JsonElement UnflattenToJsonElement(Dictionary<string, string> flat)

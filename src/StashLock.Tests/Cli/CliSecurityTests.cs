@@ -46,11 +46,37 @@ public class ServerSettingsTests : IDisposable
     public void ResolveApiKey_PrefersFlagThenEnv()
     {
         Environment.SetEnvironmentVariable(ServerSettings.ApiKeyEnvVar, "slk_env");
-        Assert.Equal("slk_flag", ServerSettings.ResolveApiKey("slk_flag"));
-        Assert.Equal("slk_env", ServerSettings.ResolveApiKey(""));
+        Assert.Equal(new ResolvedApiKey("slk_flag", ApiKeySource.Flag), ServerSettings.ResolveApiKey("slk_flag"));
+        Assert.Equal(new ResolvedApiKey("slk_env", ApiKeySource.Environment), ServerSettings.ResolveApiKey(""));
 
         Environment.SetEnvironmentVariable(ServerSettings.ApiKeyEnvVar, null);
         Assert.Null(ServerSettings.ResolveApiKey(""));
+    }
+
+    [Fact]
+    public void ResolveApiKey_PrefersFlagThenEnvThenConfigTag()
+    {
+        var config = new StashlockConfig { ApiKeys = new() { ["dev"] = "slk_config" } };
+
+        Environment.SetEnvironmentVariable(ServerSettings.ApiKeyEnvVar, "slk_env");
+        Assert.Equal("slk_flag", ServerSettings.ResolveApiKey("slk_flag", config, "dev")!.Value);
+        Assert.Equal("slk_env", ServerSettings.ResolveApiKey("", config, "dev")!.Value);
+
+        Environment.SetEnvironmentVariable(ServerSettings.ApiKeyEnvVar, null);
+        Assert.Equal(new ResolvedApiKey("slk_config", ApiKeySource.Config), ServerSettings.ResolveApiKey("", config, "dev"));
+        Assert.Equal("slk_config", ServerSettings.ResolveApiKey("", config, "DEV")!.Value);
+    }
+
+    [Fact]
+    public void ResolveApiKey_TagMissingOrBlankInConfig_ReturnsNull()
+    {
+        Environment.SetEnvironmentVariable(ServerSettings.ApiKeyEnvVar, null);
+        var config = new StashlockConfig { ApiKeys = new() { ["dev"] = "slk_dev", ["prod"] = " " } };
+
+        Assert.Null(ServerSettings.ResolveApiKey("", config, "staging"));
+        Assert.Null(ServerSettings.ResolveApiKey("", config, "prod"));
+        Assert.Null(ServerSettings.ResolveApiKey("", config, null));
+        Assert.Null(ServerSettings.ResolveApiKey("", new StashlockConfig(), "dev"));
     }
 }
 
@@ -112,5 +138,21 @@ public class GitIgnoreTests : IDisposable
         var lines = File.ReadAllLines(path);
         Assert.Equal("bin/", lines[0]);
         Assert.Single(lines, l => l == GitIgnore.KeyFilePattern);
+    }
+
+    [Fact]
+    public void EnsureConfigIgnored_AddsBothPatternsOnceEach()
+    {
+        Assert.False(GitIgnore.IsIgnored(_dir, GitIgnore.ConfigFilePattern));
+
+        Assert.True(GitIgnore.EnsureKeyFilesIgnored(_dir));
+        Assert.True(GitIgnore.EnsureConfigIgnored(_dir));
+        Assert.False(GitIgnore.EnsureConfigIgnored(_dir));
+        Assert.False(GitIgnore.EnsureKeyFilesIgnored(_dir));
+
+        var lines = File.ReadAllLines(Path.Combine(_dir, ".gitignore"));
+        Assert.Single(lines, l => l == GitIgnore.KeyFilePattern);
+        Assert.Single(lines, l => l == GitIgnore.ConfigFilePattern);
+        Assert.True(GitIgnore.IsIgnored(_dir, GitIgnore.ConfigFilePattern));
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
@@ -10,6 +11,9 @@ internal sealed class FakeServer : IDisposable
 {
     private readonly HttpListener _listener = new();
     public string Url { get; }
+
+    /// <summary>Path and Authorization header of every request, in arrival order.</summary>
+    public ConcurrentQueue<(string Path, string? Authorization)> Requests { get; } = new();
 
     public FakeServer(Func<string, (int Status, string Body)> respond)
     {
@@ -24,6 +28,7 @@ internal sealed class FakeServer : IDisposable
                 HttpListenerContext ctx;
                 try { ctx = await _listener.GetContextAsync(); }
                 catch { return; }
+                Requests.Enqueue((ctx.Request.Url!.AbsolutePath, ctx.Request.Headers["Authorization"]));
                 var (status, body) = respond(ctx.Request.Url!.AbsolutePath);
                 ctx.Response.StatusCode = status;
                 var bytes = System.Text.Encoding.UTF8.GetBytes(body);

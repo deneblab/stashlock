@@ -34,4 +34,13 @@ internal static class VaultKeyExtractor
 
         return null;
     }
+
+    /// <summary>Tag of a vault key <c>name.tag.version</c> (second-to-last part); null when the format does not match.</summary>
+    public static string? TagOf(string? vaultKey)
+    {
+        if (string.IsNullOrEmpty(vaultKey))
+            return null;
+        var parts = vaultKey.Split('.');
+        return parts.Length < 3 ? null : parts[^2];
+    }
 }

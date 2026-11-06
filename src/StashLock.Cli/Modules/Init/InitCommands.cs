@@ -106,6 +106,10 @@ internal class InitCommands
             Console.WriteLine($"Tags: {string.Join(", ", tagList)}");
         Console.ResetColor();
 
+        // The config may hold API keys (ApiKeys), so it stays out of version control like the key files
+        if (GitIgnore.EnsureConfigIgnored(targetDir))
+            Console.WriteLine($"Updated .gitignore: {GitIgnore.ConfigFilePattern}");
+
         // Auto-generate key files for each tag
         if (tagList.Count > 0)
         {
@@ -144,7 +148,7 @@ internal class InitCommands
 
             Console.WriteLine();
             Console.WriteLine($"Next: ask a StashLock admin for an API key per tag ({string.Join(", ", tagList.Select(t => $"{derivedName}.{t}"))})");
-            Console.WriteLine($"      and set it as {ServerSettings.ApiKeyEnvVar} for publish and your app.");
+            Console.WriteLine($"      and add it to ApiKeys in {VaultConfig.FileName} (or set {ServerSettings.ApiKeyEnvVar}) for publish and cstring.");
         }
         else
         {

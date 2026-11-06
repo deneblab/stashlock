@@ -44,7 +44,7 @@ internal class CstringCommands
     /// </summary>
     /// <param name="dir">Vault directory containing stashlock.config.json</param>
     /// <param name="tag">Tag to build the connection string for</param>
-    /// <param name="apiKey">API key for box.tag (falls back to STASHLOCK_API_KEY env var)</param>
+    /// <param name="apiKey">API key for box.tag (falls back to STASHLOCK_API_KEY env var, then ApiKeys.&lt;tag&gt; in stashlock.config.json)</param>
     /// <param name="base64">Print only the base64-encoded connection string</param>
     /// <param name="env">Print only the environment variable assignment</param>
     /// <param name="cancellationToken">Cancellation token</param>
@@ -96,10 +96,7 @@ internal class CstringCommands
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.Error.WriteLine($"  Vault directory: {targetDir}");
         Console.Error.WriteLine($"  Server URL: {config.ServerUrl}");
-        var resolvedApiKey = ServerSettings.ResolveApiKey(apiKey);
-        Console.Error.WriteLine($"  API Key: {(resolvedApiKey == null ? $"(none — use --api-key or {ServerSettings.ApiKeyEnvVar})" : Mask(resolvedApiKey))}");
         Console.ResetColor();
-        Console.Error.WriteLine();
 
         // 3. Resolve tag
         var selectedTag = tag;
@@ -109,6 +106,15 @@ internal class CstringCommands
             if (selectedTag == null)
                 return Task.FromResult(ExitCodes.Error);
         }
+
+        // API key for the selected tag: flag > env var > ApiKeys.<tag> in the config
+        var resolvedKey = ServerSettings.ResolveApiKey(apiKey, config, selectedTag);
+        var resolvedApiKey = resolvedKey?.Value;
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.Error.WriteLine($"  API Key: {(resolvedApiKey == null ? $"(none — {ServerSettings.ApiKeyHint(selectedTag)})" : Mask(resolvedApiKey))}");
+        Console.ResetColor();
+        Console.Error.WriteLine();
+        ServerSettings.WarnIfConfigKeyNotIgnored(resolvedKey, targetDir);
 
         // 4. Find key file for tag
         var keyFilePath = Path.Combine(targetDir, $"stashlock.key.{selectedTag}.json");
