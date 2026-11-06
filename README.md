@@ -8,7 +8,6 @@
 
 A secure, lightweight key-value storage system (secrets vault) with a REST API, .NET client library, and command-line interface.
 
-
 ## Documentation
 
 | Document | Description |
