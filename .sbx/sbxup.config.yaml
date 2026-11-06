@@ -1,6 +1,6 @@
-template: dotnet10-node24   # built locally from src/sbx-claude-dotnet10-node24/Dockerfile in the release tarball
+template: dotnet10-node26   # built locally from src/sbx-claude-dotnet10-node26/Dockerfile in the release tarball
 
-# version: 0.2.9     # pin the release to freeze the environment; without it sbxup follows the latest
+# version: 0.2.10    # pin the release to freeze the environment; without it sbxup follows the latest
 # agent: claude      # agent passed to 'sbx run' (default: claude)
 # sandbox: app-claude # sandbox name (default: <parent>--<folder>--<agent>, e.g. deneblab--app--claude)
 # clone: true        # run on a private in-container git clone (default: off)
@@ -17,7 +17,7 @@ template: dotnet10-node24   # built locally from src/sbx-claude-dotnet10-node24/
 # every organization where the app is installed. The first use per project asks for
 # your approval. Use this block or the Bitwarden one below, not both.
 github:
-  client-id: Iv23liaEy0Z52GC9CjOw                # the GitHub App's client ID (device flow enabled)
+  client-id: Iv23liaEy0Z52GC9CjOw               # the GitHub App's client ID (device flow enabled)
 
 # Or: a short-lived GitHub App installation token for the repo in 'origin', renewed
 # while 'sbx run' lasts. The app's private key is read from Bitwarden on the host
@@ -43,5 +43,5 @@ github:
 # Project directories the agent must not reach. Each is covered in the sandbox by an
 # empty read-only mount, and the agent loses sudo, which could unmount it. Default:
 # 'dev' when it exists; 'hide: []' turns it off. Not with clone mode.
-# hide:
-#   - dev
+hide:
+  - dev/secrets
